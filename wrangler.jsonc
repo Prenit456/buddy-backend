@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "buddy-remote-test",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "c0507c5b-121a-465f-afe1-d0b046edb5ca",
       "migrations_dir": "migrations"
     }
   ]
