@@ -3,12 +3,12 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-09-29",
   "workers_dev": true,
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "buddy-remote-test",
-      "database_id": "c0507c5b-121a-465f-afe1-d0b046edb5ca",
-      "migrations_dir": "migrations"
-    }
-  ]
+  "durable_objects": {
+    "bindings": [
+      { "name": "REMOTE_STATE", "class_name": "RemoteState" }
+    ]
+  },
+  "exports": {
+    "RemoteState": { "type": "durable-object", "storage": "sqlite" }
+  }
 }

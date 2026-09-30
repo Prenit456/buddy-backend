@@ -20,26 +20,27 @@ export const page = `<!doctype html>
 <body><main>
   <h1>Buddy remote-control test</h1>
   <p>Send one short line of text to Buddy from anywhere with internet access. This test does not use the Care Hub.</p>
-  <label for="token">Admin token</label>
-  <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your private ADMIN_TOKEN">
-  <small>Kept only in this browser tab. Never put it in GitHub or send it to someone else.</small>
+  <label for="password">Password</label>
+  <input id="password" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your test password">
+  <small>For this temporary test only. A four-digit password is not safe for a real Buddy device.</small>
   <form id="form">
     <label for="message">Text to show on Buddy's TFT</label>
     <textarea id="message" maxlength="120" required placeholder="Hello from another Wi-Fi network"></textarea>
     <button id="send">Send to Buddy</button>
   </form>
-  <output id="status">Enter the admin token to see the latest status.</output>
+  <output id="status">Enter the password to see the latest status.</output>
 </main>
 <script>
-  const token=document.querySelector('#token'),form=document.querySelector('#form'),status=document.querySelector('#status'),message=document.querySelector('#message');
-  token.value=sessionStorage.getItem('buddyRemoteAdmin')||'';
-  token.addEventListener('input',()=>{sessionStorage.setItem('buddyRemoteAdmin',token.value);refresh();});
+  const password=document.querySelector('#password'),form=document.querySelector('#form'),status=document.querySelector('#status'),message=document.querySelector('#message');
+  sessionStorage.removeItem('buddyRemoteAdmin');
+  password.value=sessionStorage.getItem('buddyRemotePassword')||'';
+  password.addEventListener('input',()=>{sessionStorage.setItem('buddyRemotePassword',password.value);refresh();});
   async function call(path,options={}){
-    const response=await fetch(path,{...options,headers:{'Authorization':'Bearer '+token.value,'Content-Type':'application/json'}});
+    const response=await fetch(path,{...options,headers:{'X-Admin-Password':password.value,'Content-Type':'application/json'}});
     const data=await response.json();if(!response.ok)throw Error(data.error||'Request failed');return data;
   }
   async function refresh(){
-    if(!token.value){status.textContent='Enter the admin token to see the latest status.';return;}
+    if(!password.value){status.textContent='Enter the password to see the latest status.';return;}
     try{
       const data=await call('/api/status');
       status.textContent='Latest revision: '+data.revision+'\\nBuddy confirmed revision: '+data.ackRevision+'\\nLatest text: '+(data.displayText||'(none yet)')+'\\nLast device confirmation: '+(data.ackAt||'not yet');
