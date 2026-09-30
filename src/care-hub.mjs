@@ -200,8 +200,8 @@ export class CareHub {
     const method=req.method;
     try {
       if(p==='/api/v2/auth/register'&&method==='POST'){
-        this.rate(req,'auth',12);const b=await bodyJson(req),enteredUsername=String(b.username||'').trim(),username=enteredUsername.toLowerCase(),name=text(b.name,70)||enteredUsername;
-        if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username)||!['user','supervisor'].includes(b.role)||typeof b.password!=='string'||b.password.length<8||b.password.length>256)fail(400,'Choose a 3–40 character username using letters, numbers, dots, dashes or underscores, a role, and a password of at least 8 characters.');
+        this.rate(req,'auth',12);const b=await bodyJson(req),enteredUsername=String(b.username||'').trim().replace(/\s+/g,' '),username=enteredUsername.toLowerCase(),name=text(b.name,70)||enteredUsername;
+        if(!/^[a-z0-9][a-z0-9._ -]{2,39}$/.test(username)||!['user','supervisor'].includes(b.role)||typeof b.password!=='string'||b.password.length<8||b.password.length>256)fail(400,'Choose a 3–40 character username using letters, numbers, spaces, dots, dashes or underscores, a role, and a password of at least 8 characters.');
         if(this.db.users.some(u=>u.username===username))fail(409,'That username is already taken. Use Log in if it is yours.');
         const salt=randomBytes(16).toString('hex'),passwordHash=(await scrypt(b.password,salt,32)).toString('hex');
         const user={id:id('user'),name,username,role:b.role,salt,passwordHash,createdAt:iso()};this.db.users.push(user);
@@ -212,7 +212,7 @@ export class CareHub {
         const session=token();this.db.sessions.push({hash:hash(session),userId:user.id,expires:Date.now()+7*86400000});await this.commit();return send({token:session,user:safeUser(user)},201);
       }
       if(p==='/api/v2/auth/login'&&method==='POST'){
-        this.rate(req,'auth',12);const b=await bodyJson(req),username=text(b.username||b.email,160).toLowerCase();
+        this.rate(req,'auth',12);const b=await bodyJson(req),username=text(b.username||b.email,160).replace(/\s+/g,' ').toLowerCase();
         const u=this.db.users.find(u=>u.username===username||u.email===username);
         const candidate=await scrypt(String(b.password||'').slice(0,256),u?.salt||'missing-user',32);
         if(!u||!timingSafeEqual(candidate,Buffer.from(u.passwordHash,'hex')))fail(401,'Username or password is incorrect.');

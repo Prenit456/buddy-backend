@@ -37,10 +37,11 @@ test('username-only user and carer accounts persist and log in without email', a
   assert.notEqual(hub.db.users[0].passwordHash, 'demo-password-123');
 
   const carer = await call(hub, '/api/v2/auth/register', {
-    username: 'Family_Member', password: 'another-demo-password', role: 'supervisor'
+    username: 'Prenit Carer', password: 'another-demo-password', role: 'supervisor'
   });
   assert.equal(carer.status, 201);
   assert.equal(carer.value.user.role, 'supervisor');
+  assert.equal(carer.value.user.username, 'prenit carer');
   assert.equal(hub.db.circles.length, 1);
 
   const reloaded = await makeHub().init();
@@ -50,7 +51,7 @@ test('username-only user and carer accounts persist and log in without email', a
   assert.equal(login.status, 200);
   assert.equal(login.value.user.id, owner.value.user.id);
   assert.equal((await call(reloaded, '/api/v2/auth/login', {
-    username: 'Family_Member', password: 'another-demo-password'
+    username: '  PRENIT   CARER  ', password: 'another-demo-password'
   })).status, 200);
   assert.equal((await call(reloaded, '/api/v2/auth/login', {
     username: 'prenit', password: 'wrong-password'

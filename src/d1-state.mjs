@@ -4,6 +4,13 @@
 export class D1State {
   constructor(db) { this.db = db; }
   async load() {
+    // A fresh prototype database may be bound before its migration is run.
+    // This is idempotent, and leaves existing care data untouched.
+    await this.db.prepare(`CREATE TABLE IF NOT EXISTS buddy_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`).run();
     const row = await this.db.prepare('SELECT payload FROM buddy_state WHERE id = 1').first();
     return row ? JSON.parse(row.payload) : null;
   }
