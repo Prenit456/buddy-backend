@@ -1,35 +1,40 @@
 # Buddy remote-control connection test
 
-This is a standalone Cloudflare Worker for one simple test: type text on its webpage, and the ESP32 displays that text on the TFT. The laptop and ESP need internet access but do not need to share a Wi-Fi network. It is separate from the Buddy Care Hub.
+This standalone Cloudflare Worker is only for testing laptop-to-ESP text delivery. It is not the Buddy Care Hub. The laptop and ESP need internet access but do not need to share a Wi-Fi network.
 
-The latest text and acknowledgement are held by one Cloudflare Durable Object. **No D1 database, D1 binding, SQL console, or manual database migration is needed.** Cloudflare creates the Durable Object binding from `wrangler.jsonc` during deployment. It uses Cloudflare-managed storage internally so the message survives separate laptop and ESP requests. Durable Objects with SQLite storage are available on the Workers Free plan, subject to Cloudflare's free-tier limits.
+The ESP authenticates to the Worker with its private `DEVICE_TOKEN`. The Worker gives the ESP a short-lived, one-use 8-digit linking code, which appears on the TFT. Enter that code on the control page to link the current browser tab. The page receives a 24-hour session token and can then send text. **There is no `ADMIN_TOKEN` or `ADMIN_PASSWORD` requirement.** The code expires after ten minutes, and five incorrect attempts cause a one-minute lockout. Linking a new browser replaces the previous browser session.
 
-The separate ESP firmware is in `../firmware/remote_control_test`. Its Worker URL and `DEVICE_TOKEN` are already configured in its local Git-ignored `config.h`; do not upload that file to GitHub.
+Cloudflare Durable Objects hold the latest text, pairing code, and session between requests. There is **no D1 database, D1 binding, or SQL migration**. Cloudflare provisions the Durable Object binding from `wrangler.jsonc` when deploying. It uses Cloudflare-managed storage internally.
+
+## Deploy the backend
+
+The changed backend files have been synced into the local `buddy-backend` GitHub Desktop clone. Commit and push them there, then wait for Cloudflare's Worker deployment. Make sure `wrangler.jsonc` is included: it replaces the old D1 binding with the `REMOTE_STATE` Durable Object binding. Keep the existing `DEVICE_TOKEN` Worker Secret. Old `ADMIN_TOKEN` and `ADMIN_PASSWORD` secrets are ignored by this version and can be removed from Cloudflare settings later.
+
+The existing D1 database is not deleted; this Worker simply stops using it. Do not put `DEVICE_TOKEN`, Wi-Fi credentials, or other secrets in GitHub.
 
 ## Run the control page on localhost
 
-From this folder on the laptop, run `npm run local-page` and open `http://localhost:4175/`. The page is served only on the laptop's loopback interface; it forwards `/api/status` and `/api/message` over HTTPS to the deployed Cloudflare Worker. Enter the Worker `ADMIN_PASSWORD` in the page. The ESP independently polls the same Worker, so the laptop and ESP may be on different Wi-Fi networks.
+From this folder on the laptop, run `npm run local-page` and open `http://localhost:4175/`. The page is served on the laptop's loopback interface and forwards only its pairing and control API calls over HTTPS to the deployed Worker. No browser CORS change is needed. On a phone, use the Worker's HTTPS webpage instead; `localhost` on the phone is not the laptop.
 
-This local page does **not** run the backend on the laptop and does not need a D1 database or browser CORS changes. The updated Worker code must still be deployed to Cloudflare once, with `ADMIN_PASSWORD`, `DEVICE_TOKEN`, and the `REMOTE_STATE` Durable Object binding. If the live Worker still runs the old D1 code, localhost will show the same backend error until you push and deploy the updated code. `localhost` works on the laptop only; for a phone, use the Worker's HTTPS webpage instead.
+1. Upload the updated firmware from `../firmware/remote_control_test` to the ESP with PlatformIO. Its local, Git-ignored `config.h` already contains the Worker URL, Wi-Fi, and `DEVICE_TOKEN` values from the earlier test.
+2. When Buddy connects, read the **LINK CODE** at the bottom of its TFT.
+3. Enter that code at `http://localhost:4175/` and click **Link Buddy**.
+4. Type text and click **Send to Buddy**. The ESP polls every five seconds; the page shows when it confirms the message.
 
-## Update the deployed backend
-
-1. Copy this folder's `src/worker.js`, `src/handler.js`, `src/page.js`, `wrangler.jsonc`, and `package.json` into the same locations in your cloned `buddy-backend` GitHub repository. The old `migrations/0001_remote_state.sql` and D1 binding are no longer used. Commit and push with GitHub Desktop. Cloudflare should redeploy the Worker using `npx wrangler deploy`. If you are using the clone on this computer, these files have already been synced there; you only need to commit and push.
-2. In **Workers & Pages → buddy-remote-test → Settings → Variables and Secrets**, keep the existing `DEVICE_TOKEN` secret. Add `ADMIN_PASSWORD` as a **Secret** with your temporary test password. The old `ADMIN_TOKEN` is unused and can be removed after the updated Worker is deployed. Do not put the device token or password in GitHub or screenshots.
-3. Once deployment is complete, open `https://buddy-remote-test.<your-subdomain>.workers.dev/`, enter the test password, and send a short line of text. Buddy polls every five seconds and should display it. The page shows when Buddy confirms the revision.
-
-If the ESP already has the `remote_control_test` firmware and its URL/device token are correct, it does **not** need re-uploading. The API paths and response format are unchanged.
+If the live Worker still has the old D1 code, linking will fail until the updated backend is committed, pushed, and deployed. `GET /health` alone only proves the Worker URL responds; it does not prove the pairing API is deployed.
 
 ## API
 
 | Route | Caller | Purpose |
 | --- | --- | --- |
 | `GET /health` | anyone | Confirm the Worker is deployed. |
-| `GET /api/status` | admin password | Read latest text and device confirmation. |
-| `POST /api/message` | admin password | Send `{ "text": "Hello Buddy" }` (1–120 characters). |
-| `GET /api/device/config` | device token | Fetch the latest revision and text. |
-| `POST /api/device/ack` | device token | Confirm a displayed revision. |
+| `GET /api/device/pairing` | ESP device token | Issue or fetch the current 8-digit TFT code. |
+| `POST /api/pair` | browser with TFT code | Exchange a one-use code for a browser session. |
+| `GET /api/status` | linked browser session | Read text and device confirmation. |
+| `POST /api/message` | linked browser session | Send 1–120 characters of text. |
+| `GET /api/device/config` | ESP device token | Fetch the latest text and revision. |
+| `POST /api/device/ack` | ESP device token | Confirm a displayed revision. |
 
-Admin routes use `X-Admin-Password: <password>`; device routes use `Authorization: Bearer <device token>`. The included webpage is served from the same Worker origin. It stores the password only in that browser tab's session storage.
+The ESP uses `Authorization: Bearer <device token>`. After pairing, the browser uses `Authorization: Bearer <session token>`, stored only in the current browser tab's session storage. Do not send private health information in test messages; this is not emergency infrastructure or a production authentication system.
 
-Run `npm test` in this folder for local route tests. This is a limited connection demo, not an emergency or secure remote-control system. A four-digit password is easily guessed on a public URL; replace it with strong authentication before real use, and do not send private health information in test messages.
+Run `npm test` for local route and localhost-page tests.

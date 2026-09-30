@@ -2,11 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleRequest } from '../src/handler.js';
 
-const ADMIN_PASSWORD = 'test-password';
 const DEVICE_TOKEN = 'd'.repeat(64);
+const SESSION_TOKEN = 'a'.repeat(64);
+const PAIR_CODE = '12345678';
 
 class FakeRelay {
   state = { revision: 0, displayText: '', updatedAt: null, ackRevision: 0, ackAt: null };
+  paired = false;
+  async getPairingCode() { return { code: PAIR_CODE, expiresAt: Date.now() + 600000 }; }
+  async pair(code) {
+    if (this.paired) return { status: 400, error: 'Code expired.' };
+    if (code !== PAIR_CODE) return { status: 401, error: 'That code does not match Buddy.' };
+    this.paired = true;
+    return { status: 200, token: SESSION_TOKEN, expiresAt: Date.now() + 86400000 };
+  }
+  async verifySession(token) { return this.paired && token === SESSION_TOKEN; }
   async readState() { return { ...this.state }; }
   async sendMessage(text) {
     this.state.revision += 1;
@@ -30,18 +40,14 @@ function env(relay = new FakeRelay()) {
       assert.equal(name, 'buddy-remote-test');
       return relay;
     } },
-    ADMIN_PASSWORD,
     DEVICE_TOKEN
   };
 }
 
 function request(path, credential, body) {
-  const deviceRoute = path.startsWith('/api/device/');
   return new Request('https://buddy-remote-test.example' + path, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: credential ? deviceRoute
-      ? { Authorization: 'Bearer ' + credential }
-      : { 'X-Admin-Password': credential } : {},
+    headers: credential ? { Authorization: 'Bearer ' + credential } : {},
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }
@@ -51,39 +57,44 @@ async function call(environment, path, credential, body) {
   return { status: response.status, body: await response.json() };
 }
 
-test('health is public but sending text requires the admin password', async () => {
+test('health is public, while ESP pairing code requires its device credential', async () => {
   const bindings = env();
   assert.deepEqual((await call(bindings, '/health')).body, { ok: true });
+  assert.equal((await call(bindings, '/api/device/pairing')).status, 401);
+  assert.equal((await call(bindings, '/api/device/pairing', 'short')).status, 401);
+  assert.equal((await call(bindings, '/api/device/pairing', DEVICE_TOKEN)).body.code, PAIR_CODE);
+  assert.equal((await call({ ...bindings, DEVICE_TOKEN: undefined }, '/api/device/pairing')).status, 503);
+});
+
+test('a one-use code links the browser; old password header is not accepted', async () => {
+  const bindings = env();
   assert.equal((await call(bindings, '/api/status')).status, 401);
-  assert.equal((await call(bindings, '/api/status', 'wrong')).status, 401);
-  assert.equal((await call(bindings, '/api/status', DEVICE_TOKEN)).status, 401);
-  assert.equal((await call(bindings, '/api/status', ADMIN_PASSWORD)).status, 200);
+  assert.equal((await call(bindings, '/api/pair', undefined, { code: 'bad' })).status, 400);
+  assert.equal((await call(bindings, '/api/pair', undefined, { code: '00000000' })).status, 401);
+  const linked = await call(bindings, '/api/pair', undefined, { code: PAIR_CODE });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.body.token, SESSION_TOKEN);
+  assert.equal((await call(bindings, '/api/pair', undefined, { code: PAIR_CODE })).status, 400);
+  assert.equal((await call(bindings, '/api/status', SESSION_TOKEN)).status, 200);
   const oldHeader = new Request('https://buddy-remote-test.example/api/status', {
-    headers: { Authorization: 'Bearer ' + 'a'.repeat(64) }
+    headers: { 'X-Admin-Password': '1234' }
   });
   assert.equal((await handleRequest(oldHeader, bindings)).status, 401);
 });
 
-test('device token is separate from the website password', async () => {
+test('linked laptop message reaches ESP and acknowledgement returns to laptop', async () => {
   const bindings = env();
-  assert.equal((await call(bindings, '/api/device/config', ADMIN_PASSWORD)).status, 401);
-  assert.equal((await call(bindings, '/api/device/config', DEVICE_TOKEN)).status, 200);
-  assert.equal((await call({ ...bindings, DEVICE_TOKEN: 'short' }, '/api/device/config', 'short')).status, 401);
-  assert.equal((await call({ ...bindings, DEVICE_TOKEN: undefined }, '/api/device/config')).status, 503);
-});
-
-test('laptop message reaches ESP polling route and acknowledgment reaches laptop', async () => {
-  const bindings = env();
-  assert.equal((await call(bindings, '/api/message', ADMIN_PASSWORD, { text: '   ' })).status, 400);
-  assert.equal((await call(bindings, '/api/message', ADMIN_PASSWORD, { text: 'a'.repeat(121) })).status, 400);
-  const saved = await call(bindings, '/api/message', ADMIN_PASSWORD, { text: 'Hello Buddy' });
+  await call(bindings, '/api/pair', undefined, { code: PAIR_CODE });
+  assert.equal((await call(bindings, '/api/message', SESSION_TOKEN, { text: '   ' })).status, 400);
+  assert.equal((await call(bindings, '/api/message', SESSION_TOKEN, { text: 'a'.repeat(121) })).status, 400);
+  const saved = await call(bindings, '/api/message', SESSION_TOKEN, { text: 'Hello Buddy' });
   assert.equal(saved.status, 200);
   assert.equal(saved.body.revision, 1);
   assert.deepEqual((await call(bindings, '/api/device/config', DEVICE_TOKEN)).body,
     { revision: 1, displayText: 'Hello Buddy' });
   assert.equal((await call(bindings, '/api/device/ack', DEVICE_TOKEN, { revision: 2 })).status, 400);
   assert.equal((await call(bindings, '/api/device/ack', DEVICE_TOKEN, { revision: 1 })).status, 200);
-  const status = await call(bindings, '/api/status', ADMIN_PASSWORD);
+  const status = await call(bindings, '/api/status', SESSION_TOKEN);
   assert.equal(status.body.ackRevision, 1);
   assert.ok(status.body.ackAt);
 });
@@ -91,6 +102,6 @@ test('laptop message reaches ESP polling route and acknowledgment reaches laptop
 test('missing relay binding reports deployment setup', async () => {
   const bindings = env();
   delete bindings.REMOTE_STATE;
-  assert.equal((await call(bindings, '/api/status', ADMIN_PASSWORD)).status, 503);
+  assert.equal((await call(bindings, '/api/status', SESSION_TOKEN)).status, 503);
   assert.equal((await call(bindings, '/api/device/config', DEVICE_TOKEN)).status, 503);
 });

@@ -26,11 +26,6 @@ function authorizedDevice(request, secret) {
     equalCredentials(request.headers.get('Authorization') || '', `Bearer ${secret}`);
 }
 
-function authorizedAdmin(request, password) {
-  return typeof password === 'string' && password.length > 0 &&
-    equalCredentials(request.headers.get('X-Admin-Password') || '', password);
-}
-
 async function bodyJson(request) {
   if (Number(request.headers.get('Content-Length') || 0) > 1024) throw new Error('Request is too large.');
   const raw = await request.text();
@@ -50,17 +45,30 @@ export async function handleRequest(request, env) {
   if (!url.pathname.startsWith('/api/')) return json({ error: 'Not found.' }, 404);
   if (!env.REMOTE_STATE) return json({ error: 'Relay binding missing. Deploy with wrangler.jsonc.' }, 503);
 
-  const deviceRoute = url.pathname.startsWith('/api/device/');
-  if (deviceRoute) {
-    if (!env.DEVICE_TOKEN) return json({ error: 'Add DEVICE_TOKEN Worker secret.' }, 503);
-    if (!authorizedDevice(request, env.DEVICE_TOKEN)) return json({ error: 'Invalid device token.' }, 401);
-  } else {
-    if (!env.ADMIN_PASSWORD) return json({ error: 'Add ADMIN_PASSWORD Worker secret.' }, 503);
-    if (!authorizedAdmin(request, env.ADMIN_PASSWORD)) return json({ error: 'Incorrect password.' }, 401);
-  }
-
   try {
+    const deviceRoute = url.pathname.startsWith('/api/device/');
+    if (deviceRoute) {
+      if (!env.DEVICE_TOKEN) return json({ error: 'Add DEVICE_TOKEN Worker secret.' }, 503);
+      if (!authorizedDevice(request, env.DEVICE_TOKEN)) return json({ error: 'Invalid device token.' }, 401);
+    }
+
     const relay = env.REMOTE_STATE.getByName('buddy-remote-test');
+    if (url.pathname === '/api/pair' && request.method === 'POST') {
+      const body = await bodyJson(request);
+      if (typeof body.code !== 'string' || !/^\d{8}$/.test(body.code))
+        return json({ error: 'Enter the 8-digit code shown on Buddy.' }, 400);
+      const result = await relay.pair(body.code);
+      const { status, ...payload } = result;
+      return json(payload, status);
+    }
+
+    if (!deviceRoute) {
+      const supplied = request.headers.get('Authorization') || '';
+      const token = supplied.startsWith('Bearer ') ? supplied.substring(7) : '';
+      if (!await relay.verifySession(token))
+        return json({ error: 'Link Buddy using the code on its TFT.' }, 401);
+    }
+
     if (url.pathname === '/api/status' && request.method === 'GET')
       return json(await relay.readState());
     if (url.pathname === '/api/message' && request.method === 'POST') {
@@ -74,6 +82,8 @@ export async function handleRequest(request, env) {
       const state = await relay.readState();
       return json({ revision: state.revision, displayText: state.displayText });
     }
+    if (url.pathname === '/api/device/pairing' && request.method === 'GET')
+      return json(await relay.getPairingCode());
     if (url.pathname === '/api/device/ack' && request.method === 'POST') {
       const body = await bodyJson(request);
       if (!Number.isSafeInteger(body.revision) || body.revision < 0)

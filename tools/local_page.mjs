@@ -47,7 +47,7 @@ export function createLocalPageServer({ workerUrl = DEFAULT_WORKER_URL, fetchImp
     }
 
     const allowed = (request.method === 'GET' && (url.pathname === '/api/status' || url.pathname === '/health')) ||
-      (request.method === 'POST' && url.pathname === '/api/message');
+      (request.method === 'POST' && (url.pathname === '/api/message' || url.pathname === '/api/pair'));
     if (!allowed || url.search) {
       response.writeHead(404).end('Not found');
       return;
@@ -55,8 +55,8 @@ export function createLocalPageServer({ workerUrl = DEFAULT_WORKER_URL, fetchImp
 
     try {
       const headers = {};
-      if (request.headers['x-admin-password'])
-        headers['X-Admin-Password'] = request.headers['x-admin-password'];
+      if (request.headers.authorization)
+        headers.Authorization = request.headers.authorization;
       if (request.method === 'POST') headers['Content-Type'] = 'application/json';
       const body = request.method === 'POST' ? await readSmallBody(request) : undefined;
       const upstream = await fetchImpl(new URL(url.pathname, worker), {
