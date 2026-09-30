@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { handleRequest } from './handler.js';
+export { CareState } from './care-state.mjs';
 
 const initialState = () => ({
   revision: 0,
@@ -32,6 +33,8 @@ async function tokenHash(token) {
 // storage with the Worker; there is no D1 binding or SQL migration to run.
 export class RemoteState extends DurableObject {
   async getPairingCode() {
+    const linked = await this.ctx.storage.get('linked');
+    if (linked) return { paired: true, code: '', expiresAt: 0 };
     const now = Date.now();
     let pairing = await this.ctx.storage.get('pairing');
     const canRotate = !pairing?.lockedUntil || pairing.lockedUntil <= now;
@@ -44,6 +47,8 @@ export class RemoteState extends DurableObject {
   }
 
   async pair(code) {
+    if (await this.ctx.storage.get('linked'))
+      return { status: 409, error: 'Buddy is already paired. Unpair it on the device first.' };
     const now = Date.now();
     const pairing = await this.ctx.storage.get('pairing');
     if (!pairing || pairing.used || pairing.expiresAt <= now)
@@ -71,6 +76,19 @@ export class RemoteState extends DurableObject {
     const session = await this.ctx.storage.get('session');
     return !!session && session.expiresAt > Date.now() && session.hash === await tokenHash(token);
   }
+
+  async linkCircle(circleId, deviceId) {
+    await this.ctx.storage.put('linked', { circleId, deviceId });
+    await this.ctx.storage.delete('session');
+  }
+
+  async unlinkCircle() {
+    await this.ctx.storage.delete('linked');
+    await this.ctx.storage.delete('pairing');
+    await this.ctx.storage.delete('session');
+  }
+
+  async linkedCircle() { return (await this.ctx.storage.get('linked')) || null; }
 
   async readState() {
     return (await this.ctx.storage.get('state')) || initialState();

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buddy TFT preview</title>
+<link rel="stylesheet" href="/portal.css">
+<style>
+  body{min-height:100vh;display:grid;place-items:center;background:#eeeae2;margin:0;padding:1rem}
+  main{max-width:700px;width:100%;background:white;border-radius:20px;padding:1.5rem;box-shadow:0 12px 40px #163b3c20}
+  h1{font-size:1.6rem;margin:0 0 1rem}
+  p{color:#536d70;line-height:1.5}
+  select{margin-left:.5rem}
+</style>
+<main>
+  <h1>Buddy's 320×240 screen</h1>
+  <canvas id="buddyTftPreview" width="320" height="240" role="img" aria-label="Animated eye screen preview"></canvas>
+  <form id="deviceSettingsForm"><label>Eye color <select name="eyeColor"><option value="20127">Ocean blue</option><option value="32724">Mint green</option><option value="47679">Lavender</option><option value="64841">Warm amber</option></select></label></form>
+  <p>This page is a visual preview only. It does not connect to or change the ESP. Its geometry and RGB565 palette match the firmware; panel colors and timing still need physical verification.</p>
+</main>
+<script type="module" src="/device-preview.js"></script>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#173b3f" />
+    <meta name="description" content="Configure and care for your Buddy companion." />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/assets/buddy-mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>Buddy Care</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="#dashboard" aria-label="Buddy Care home">
+          <img src="/assets/buddy-mark.svg" alt="" />
+          <span><b>Buddy</b><small>Care</small></span>
+        </a>
+
+        <nav class="nav" aria-label="Care settings">
+          <a href="#dashboard" data-page="dashboard" class="active"><span>⌂</span>Overview</a>
+          <a href="#person" data-page="person"><span>☺</span>Person</a>
+          <a href="#voice" data-page="voice"><span>◖</span>Voice & display</a>
+          <a href="#contacts" data-page="contacts"><span>♧</span>Care circle</a>
+          <a href="#reminders" data-page="reminders"><span>◷</span>Reminders</a>
+          <a href="#calendar" data-page="calendar"><span>▦</span>Calendar</a>
+          <a href="#prescription" data-page="prescription"><span>✚</span>Prescription scan</a>
+          <a href="#wellbeing" data-page="wellbeing"><span>♡</span>Care journal</a>
+          <a href="#safety" data-page="safety"><span>♡</span>Safety</a>
+          <a href="#messages" data-page="messages"><span>✦</span>Send a message</a>
+          <a href="#device" data-page="device"><span>⚙</span>Device</a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="device-pill">
+            <span class="status-dot" id="sidebarDot"></span>
+            <div><b id="sidebarStatus">Connecting…</b><small id="sidebarDevice">Buddy</small></div>
+          </div>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <button class="menu-button" id="menuButton" aria-label="Open menu">☰</button>
+          <div>
+            <p class="eyebrow" id="pageEyebrow">YOUR COMPANION</p>
+            <h1 id="pageTitle">Good morning</h1>
+          </div>
+          <div class="top-actions">
+            <span class="save-state" id="saveState">All changes saved</span>
+            <button class="button primary" id="saveButton">Save changes</button>
+          </div>
+        </header>
+
+        <section class="page active" id="page-dashboard" data-title="Good morning" data-eyebrow="YOUR COMPANION">
+          <div class="hero-grid">
+            <article class="card status-card">
+              <div class="card-heading">
+                <div><p class="eyebrow">BUDDY STATUS</p><h2 id="deviceGreeting">Everything looks peaceful.</h2></div>
+                <span class="connection-badge" id="connectionBadge"><i></i> Connecting</span>
+              </div>
+              <div class="buddy-face" id="miniFace" aria-label="Buddy hardware display status">Buddy's eyes are shown on the ESP32 screen.</div>
+              <p class="status-copy" id="deviceMessage">Waiting for Buddy to respond…</p>
+            </article>
+
+            <article class="card today-card">
+              <p class="eyebrow">TODAY AT A GLANCE</p>
+              <div class="metric-row"><span class="metric-icon medicine">✚</span><div><strong id="todayReminderCount">0</strong><small>active reminders</small></div></div>
+              <div class="metric-row"><span class="metric-icon circle">♡</span><div><strong id="careCircleCount">0</strong><small>people in the care circle</small></div></div>
+              <div class="metric-row"><span class="metric-icon circle">⌁</span><div><strong id="lastEvent">No events yet</strong><small>latest Buddy activity</small></div></div>
+            </article>
+          </div>
+
+          <div class="section-heading"><div><p class="eyebrow">QUICK SETTINGS</p><h2>Make Buddy feel familiar</h2></div></div>
+          <div class="three-grid">
+            <button class="feature-card" data-go="voice"><span class="feature-icon peach">◖</span><b>Voice & pace</b><small id="voiceSummary">Warm · comfortable pace</small><em>Adjust →</em></button>
+            <button class="feature-card" data-go="reminders"><span class="feature-icon mint">◷</span><b>Daily routine</b><small>Medicines, meals and appointments</small><em>Manage →</em></button>
+            <button class="feature-card" data-go="contacts"><span class="feature-icon blue">♧</span><b>Care circle</b><small>Family, neighbours and doctors</small><em>Manage →</em></button>
+          </div>
+
+          <article class="card activity-card">
+            <div class="card-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>A quiet record, when you need it</h2></div><button class="text-button" id="refreshButton">Refresh</button></div>
+            <div class="activity-list" id="activityList"><p class="empty">No activity has been recorded yet.</p></div>
+          </article>
+        </section>
+
+        <section class="page" id="page-person" data-title="Who Buddy cares for" data-eyebrow="PERSONAL PROFILE">
+          <article class="card form-card">
+            <div class="section-intro"><span class="avatar" id="profileAvatar">A</span><div><h2>Make every interaction personal</h2><p>Buddy uses these details in greetings and reminders.</p></div></div>
+            <div class="form-grid">
+              <label><span>Preferred name</span><input data-path="person.name" autocomplete="name" /></label>
+              <label><span>Language</span><select data-path="person.language"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी</option><option value="ta-IN">தமிழ்</option><option value="te-IN">తెలుగు</option><option value="mr-IN">मराठी</option><option value="en-US">English (US)</option></select></label>
+              <label><span>Pronouns</span><input data-path="person.pronouns" placeholder="she/her" /></label>
+              <label><span>How Buddy should address them</span><input data-path="person.formOfAddress" placeholder="Aunty, Mrs. Rao, Amma…" /></label>
+            </div>
+          </article>
+          <article class="note-card"><span>Privacy promise</span><p>Buddy keeps its schedule on the device. Health information should only be added when the person has agreed to share it.</p></article>
+        </section>
+
+        <section class="page" id="page-voice" data-title="A voice that feels kind" data-eyebrow="VOICE & ACCESSIBILITY">
+          <div class="two-grid">
+            <article class="card form-card">
+              <h2>Voice personality</h2><p class="subtle">Choose a style, then preview it through this phone or laptop.</p>
+              <div class="voice-options" id="voiceOptions">
+                <button data-voice="bella"><span>●</span><b>Bella</b><small>warm and professional</small></button>
+                <button data-voice="sarah"><span>●</span><b>Sarah</b><small>mature and reassuring</small></button>
+                <button data-voice="brian"><span>●</span><b>Brian</b><small>deep and comforting</small></button>
+                <button data-voice="daniel"><span>●</span><b>Daniel</b><small>steady British English</small></button>
+              </div>
+              <button class="button primary full" id="previewVoice">▶ Preview voice</button>
+            </article>
+            <article class="card form-card">
+              <h2>Speech controls</h2>
+              <label class="range-label"><span><b>Speaking pace</b><output id="rateOutput">72</output></span><input type="range" min="40" max="120" data-path="voice.rate" /></label>
+              <label class="range-label"><span><b>Offline fallback pitch</b><output id="pitchOutput">64</output></span><input type="range" min="30" max="100" data-path="voice.pitch" /><small>Natural voices retain their original pitch.</small></label>
+              <label class="range-label"><span><b>Volume</b><output id="volumeOutput">82</output></span><input type="range" min="0" max="100" data-path="voice.volume" /></label>
+              <label><span>Repeat unconfirmed reminders</span><select data-path="voice.repeatCount" data-number><option value="1">Once</option><option value="2">Twice</option><option value="3">Three times</option></select><small>One minute apart; stops after you confirm or snooze.</small></label>
+            </article>
+          </div>
+          <article class="card form-card">
+            <h2>Display comfort</h2>
+            <div class="form-grid">
+              <label class="range-label"><span><b>Screen brightness</b><output id="brightnessOutput">220</output></span><input type="range" min="30" max="255" data-path="display.brightness" disabled /><small>The current TFT backlight is wired directly to 3.3 V, so brightness cannot change in software yet.</small></label>
+              <label><span>TFT orientation</span><select data-path="display.orientation"><option value="landscape">320 × 240 · landscape</option></select></label>
+              <label><span>Eye color</span><select data-path="display.eyeColor" data-number><option value="20127">Ocean blue</option><option value="32724">Mint green</option><option value="47679">Lavender</option><option value="64841">Warm amber</option></select></label>
+            </div>
+            <p class="subtle">Animated eyes use the chosen color. Time and date appear at the top; battery shows --% until a battery sensor is installed.</p>
+          </article>
+        </section>
+
+        <section class="page" id="page-contacts" data-title="The people who care" data-eyebrow="CARE CIRCLE">
+          <div class="section-heading"><div><h2>Trusted contacts</h2><p>Choose recipients for configured alerts. Saving a phone number alone does not enable calls or SMS.</p></div><button class="button primary" id="addContact">＋ Add person</button></div>
+          <div class="stack" id="contactsList"></div>
+        </section>
+
+        <section class="page" id="page-reminders" data-title="A gentle daily rhythm" data-eyebrow="REMINDERS & ROUTINES">
+          <div class="section-heading"><div><h2>Upcoming reminders</h2><p>These are saved on Buddy and continue when Wi‑Fi is unavailable.</p></div><button class="button primary" id="addReminder">＋ Add reminder</button></div>
+          <div class="stack" id="remindersList"></div>
+        </section>
+
+        <section class="page" id="page-safety" data-title="Help, without hesitation" data-eyebrow="SAFETY & SOS">
+          <div class="two-grid">
+            <article class="card form-card">
+              <h2>Emergency response</h2>
+              <label class="range-label"><span><b>Cancellation countdown</b><output id="sosOutput">8 seconds</output></span><input type="range" min="3" max="30" data-path="safety.sosCountdownSeconds" /></label>
+              <label><span>Alert webhook URL</span><input type="url" data-path="safety.webhookUrl" placeholder="https://your-service.example/buddy-alert" /><small>For SMS, WhatsApp, email, or a custom caregiver service.</small></label>
+              <label><span>Alert after a missed reminder</span><select data-path="safety.missedReminderMinutes" data-number><option value="10">10 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+            </article>
+            <article class="card emergency-card">
+              <span class="shield">♡</span><h2>Test the safety flow</h2><p>Starts the countdown on Buddy. It can be cancelled before any webhook is called.</p>
+              <button class="button danger full" data-action="sos">Start SOS test</button>
+              <button class="button soft full" data-action="cancel_sos">Cancel SOS</button>
+            </article>
+          </div>
+          <article class="card form-card"><h2>Quiet hours</h2><div class="form-grid"><label><span>Starts</span><input type="time" data-path="safety.quietStart" /></label><label><span>Ends</span><input type="time" data-path="safety.quietEnd" /></label></div><p class="subtle">Emergency alerts and medicine reminders still sound during quiet hours.</p></article>
+        </section>
+
+        <section class="page" id="page-messages" data-title="Send a little warmth" data-eyebrow="FAMILY MESSAGES">
+          <article class="card message-composer">
+            <span class="message-illustration">✦</span><h2>What should Buddy say?</h2><p>Your message is read aloud using the chosen voice, with a friendly expression on the display.</p>
+            <textarea id="messageText" maxlength="180" placeholder="Hi Amma, I hope you're having a lovely afternoon. I'll call you at six."></textarea>
+            <div class="composer-foot"><small><span id="messageCount">0</span>/180 characters</small><button class="button primary" id="sendMessage">Send to Buddy</button></div>
+          </article>
+          <div class="suggestion-row"><button>Lunch is in the fridge ❤️</button><button>I'll call you this evening</button><button>Have you had some water?</button></div>
+        </section>
+
+        <section class="page" id="page-device" data-title="Buddy's connection" data-eyebrow="DEVICE SETTINGS">
+          <div class="two-grid">
+            <article class="card form-card">
+              <h2>Connection</h2>
+              <label><span>Buddy address</span><div class="input-button"><input id="deviceUrl" placeholder="http://buddy.local" /><button class="button soft" id="connectButton">Connect</button></div><small>Use the ESP32's local address on the same Wi‑Fi. In care-circle mode, pairing happens in My Buddy.</small></label>
+              <div class="device-facts"><p><span>Status</span><b id="factStatus">Unknown</b></p><p><span>IP address</span><b id="factIp">—</b></p><p><span>Firmware</span><b id="factFirmware">—</b></p><p><span>Free memory</span><b id="factMemory">—</b></p><p><span>Audio</span><b id="factAudio">—</b></p></div>
+            </article>
+            <article class="card form-card">
+              <h2>Device preferences</h2>
+              <label><span>Device name</span><input data-path="device.deviceName" /></label>
+              <label><span>Buddy's name</span><input data-path="device.callName" maxlength="24" placeholder="Buddy" /><small>For this firmware, say “Hi ESP” to wake Buddy offline. The name here is for introductions; a custom “Buddy” wake model can be added later.</small></label>
+              <label><span>Time zone</span><select id="timezoneChoice"><option value="Asia/Kolkata">India</option><option value="UTC">UTC</option><option value="Europe/London">United Kingdom</option><option value="America/New_York">US Eastern</option></select></label>
+              <p class="subtle">Voice and prescription processing use the Cloudflare backend. No laptop IP address is needed on Buddy.</p>
+              <div class="toggle-row"><div><b>Hands-free listening</b><small>Enable the microphone in the device lab. Turn it off there at any time. The demo uses cloud transcription.</small></div></div>
+            </article>
+          </div>
+          <article class="warning-card"><div><b>Reset Wi‑Fi</b><p>Use this only when moving Buddy to a different network.</p></div><button class="button danger-ghost" id="resetWifi">Reset Wi‑Fi</button></article>
+        </section>
+        <section class="page" id="page-calendar" data-title="A little structure, every day" data-eyebrow="BUDDY CALENDAR">
+          <div class="section-heading"><div><h2 id="calendarMonth">Your month</h2><p id="calendarSource">Loading the device schedule…</p></div><div class="calendar-controls"><button class="button soft" id="previousMonth" aria-label="Previous month">←</button><button class="button soft" id="currentMonth">Today</button><button class="button soft" id="nextMonth" aria-label="Next month">→</button></div></div>
+          <div class="calendar-layout"><article class="card calendar-card"><div class="weekday-row"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="calendar-grid" id="calendarGrid"></div></article><article class="card form-card"><p class="eyebrow">SELECTED DAY</p><h2 id="selectedDate">Today</h2><div id="dayAgenda" class="day-agenda"></div><button class="button primary full" id="newCalendarItem">＋ Add for this day</button></article></div>
+          <form class="card form-card" id="calendarEditor" hidden><h2>Add a reminder or appointment</h2><div class="form-grid"><label><span>Title</span><input id="calendarTitle" required maxlength="120" /></label><label><span>Time</span><input id="calendarTime" type="time" value="09:00" required /></label><label><span>Type</span><select id="calendarKind"><option value="appointment">Appointment</option><option value="medicine">Medicine</option><option value="activity">Activity</option><option value="hydration">Water</option><option value="meal">Meal</option></select></label><label><span>Repeat</span><select id="calendarRepeat"><option value="once">Only this day</option><option value="daily">Every day in this date range</option><option value="weekly">Each week on this weekday</option></select></label><label><span>Start date</span><input id="calendarStart" type="date" required /></label><label><span>End date</span><input id="calendarEnd" type="date" required /></label></div><label><span>Spoken instructions</span><input id="calendarDetail" maxlength="240" /></label><div class="calendar-controls"><button type="submit" class="button primary">Save to Buddy</button><button type="button" id="cancelCalendarItem" class="button soft">Cancel</button></div></form>
+        </section>
+        <section class="page" id="page-prescription" data-title="From prescription to daily care" data-eyebrow="PHOTO → REVIEW → CALENDAR">
+          <div class="two-grid"><article class="card form-card"><h2>Read a prescription</h2><p class="subtle">Take a clear photo or choose an image. Photos are read locally on this Mac and removed after processing.</p><label class="photo-drop"><span>Choose or photograph a prescription</span><input id="prescriptionPhoto" type="file" accept="image/jpeg,image/png" capture="environment" /></label><img id="prescriptionPreview" class="prescription-preview" alt="Prescription preview" hidden /><button id="scanPrescription" class="button primary full">Read photo</button><p id="scanStatus" role="status"></p></article><article class="card form-card"><h2>Check the extracted text</h2><p class="subtle">Handwriting can be misread. Correct the text against the original prescription before creating the schedule.</p><textarea id="prescriptionText" rows="10" placeholder="Or paste prescription text here…"></textarea><button id="parsePrescription" class="button soft full">Build review list from text</button></article></div>
+          <article class="card form-card" id="prescriptionReview" hidden><h2>Review before adding</h2><p class="subtle">Confirm names, doses, instructions, exact times and course dates. Buddy does not infer missing doses or decide when medicine should be taken.</p><div id="prescriptionItems" class="stack"></div><button id="importPrescription" class="button primary">Add reviewed items to calendar</button></article>
+        </section>
+        <section class="page" id="page-wellbeing" data-title="Small moments of care" data-eyebrow="CARE JOURNAL">
+          <div class="three-grid" id="careMetrics"></div><article class="card form-card"><h2>Build a gentle routine</h2><p class="subtle">Add only routines that suit the person's needs. Water prompts do not set a fluid target.</p><div class="routine-actions"><button class="button soft" data-routine="hydration">＋ Water check-in</button><button class="button soft" data-routine="movement">＋ Gentle movement</button><button class="button soft" data-routine="connection">＋ Call family</button><button class="button soft" data-routine="wellbeing">＋ Evening check-in</button></div></article>
+          <article class="card form-card"><div class="section-heading"><h2>Care history</h2><button id="exportJournal" class="button soft">Download history</button></div><p class="subtle">Confirmations record what the person reported; they do not verify medication was taken.</p><div id="careJournal"></div></article>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <template id="contactTemplate">
+      <article class="card list-card contact-card">
+        <div class="list-avatar"></div>
+        <div class="list-main">
+          <div class="inline-grid"><label><span>Name</span><input data-field="name" /></label><label><span>Relationship</span><input data-field="relationship" /></label><label><span>Phone</span><input type="tel" data-field="phone" /></label></div>
+          <div class="compact-toggles"><label><input type="checkbox" data-field="receivesSos" /> SOS alerts</label><label><input type="checkbox" data-field="receivesMissedReminders" /> Missed reminders</label></div>
+        </div>
+        <button class="icon-button remove" aria-label="Remove contact">×</button>
+      </article>
+    </template>
+
+    <template id="reminderTemplate">
+      <article class="card list-card reminder-card">
+        <span class="reminder-kind">✚</span>
+        <div class="list-main">
+          <div class="inline-grid reminder-fields"><label><span>Title</span><input data-field="title" /></label><label><span>Time</span><input type="time" data-field="time" /></label><label><span>Type</span><select data-field="kind"><option value="medicine">Medicine</option><option value="meal">Meal</option><option value="hydration">Hydration</option><option value="appointment">Appointment</option><option value="activity">Activity</option></select></label></div>
+          <label><span>Spoken detail</span><input data-field="detail" /></label>
+          <div class="form-grid"><label><span>Start date (optional)</span><input type="date" data-field="startDate" /></label><label><span>End date (optional)</span><input type="date" data-field="endDate" /></label></div>
+          <div class="days" aria-label="Reminder days"></div>
+        </div>
+        <label class="switch list-switch"><input type="checkbox" data-field="enabled" /><i></i></label>
+        <button class="icon-button remove" aria-label="Remove reminder">×</button>
+      </article>
+    </template>
+
+    <link rel="stylesheet" href="/care-ui.css" />
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

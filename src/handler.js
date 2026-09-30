@@ -43,6 +43,11 @@ export async function handleRequest(request, env) {
   }
   if (url.pathname === '/health' && request.method === 'GET') return json({ ok: true });
   if (!url.pathname.startsWith('/api/')) return json({ error: 'Not found.' }, 404);
+  if (url.pathname.startsWith('/api/v2/')) {
+    if (!env.CARE_STATE || !env.DB) return json({ error: 'Care backend or D1 binding missing. Apply the D1 migration and redeploy.' }, 503);
+    try { return await env.CARE_STATE.getByName('buddy-care').fetch(request); }
+    catch (error) { console.error('Buddy care backend failed', error); return json({ error: 'Cloud care backend unavailable.' }, 503); }
+  }
   if (!env.REMOTE_STATE) return json({ error: 'Relay binding missing. Deploy with wrangler.jsonc.' }, 503);
 
   try {
@@ -53,6 +58,13 @@ export async function handleRequest(request, env) {
     }
 
     const relay = env.REMOTE_STATE.getByName('buddy-remote-test');
+    if (deviceRoute && ['/api/device/sync', '/api/device/media', '/api/device/unpair',
+      '/api/device/assistant', '/api/device/tts', '/api/device/transcribe'].includes(url.pathname)) {
+      if (!env.CARE_STATE || !env.DB) return json({ error: 'Care backend or D1 binding missing.' }, 503);
+      const upstreamUrl = new URL(request.url);
+      upstreamUrl.pathname = url.pathname.replace('/api/device/', '/api/v2/device/');
+      return env.CARE_STATE.getByName('buddy-care').fetch(new Request(upstreamUrl, request));
+    }
     if (url.pathname === '/api/pair' && request.method === 'POST') {
       const body = await bodyJson(request);
       if (typeof body.code !== 'string' || !/^\d{8}$/.test(body.code))

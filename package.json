@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "local-page": "node tools/local_page.mjs",
+    "cloud-site": "node tools/cloud_site.mjs",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

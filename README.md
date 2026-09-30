@@ -1,40 +1,23 @@
-# Buddy remote-control connection test
+# Buddy cloud backend (Cloudflare Worker + D1)
 
-This standalone Cloudflare Worker is only for testing laptop-to-ESP text delivery. It is not the Buddy Care Hub. The laptop and ESP need internet access but do not need to share a Wi-Fi network.
+This folder contains the Buddy care-circle API, remote ESP relay, D1 migration, and a localhost website server. The ESP and browser use HTTPS to reach the same Worker; they do not need to share Wi-Fi. The old `care-hub` Node server is not used by this path. The older text-only relay page is retained at `/remote-test` for historical tests, but it cannot replace the full care-circle website.
 
-The ESP authenticates to the Worker with its private `DEVICE_TOKEN`. The Worker gives the ESP a short-lived, one-use 8-digit linking code, which appears on the TFT. Enter that code on the control page to link the current browser tab. The page receives a 24-hour session token and can then send text. **There is no `ADMIN_TOKEN` or `ADMIN_PASSWORD` requirement.** The code expires after ten minutes, and five incorrect attempts cause a one-minute lockout. Linking a new browser replaces the previous browser session.
+## Before the website can work against Cloudflare
 
-Cloudflare Durable Objects hold the latest text, pairing code, and session between requests. There is **no D1 database, D1 binding, or SQL migration**. Cloudflare provisions the Durable Object binding from `wrangler.jsonc` when deploying. It uses Cloudflare-managed storage internally.
+1. Copy **this folder's complete contents** into the root of the `buddy-backend` GitHub Desktop clone, replacing that clone's old Worker files. Also copy the sibling `companion-app` folder into the clone as `site/` so its localhost website and tests work independently. Keep the clone's `.git` folder. Do not copy `.env.local`, private `config.h`, `.wrangler`, or `.pio` files.
+2. Commit and push with GitHub Desktop. Check that the Cloudflare Worker builds and deploys from the new commit. `wrangler.jsonc` already has the supplied D1 UUID and both Durable Object bindings.
+3. Apply `migrations/0001_care_state.sql` to the **remote** `buddy` D1 database. In Cloudflare's D1 console, select `buddy` and run that SQL, or run `npx wrangler d1 migrations apply DB --remote` after `wrangler login`. Do not confuse `--local` with the live database.
+4. In the Worker Settings → Variables and Secrets, retain the `DEVICE_TOKEN` secret used by the ESP. Set `ELEVENLABS_API_KEY` for primary speech and transcription, `GEMINI_API_KEY` for speech fallback and prescription-photo reading, and `GROQ_API_KEY` for AI chat. `OPENROUTER_API_KEY` is an optional chat fallback. Keep all keys as Worker secrets, not GitHub files or browser code. The default Gemini fallback speech model is `gemini-3.8-flash-tts`; if your account uses another compatible TTS model, set `GEMINI_TTS_MODEL` as a Worker variable.
+5. Verify `/api/v2/me` without a session returns `{"error":"Log in to Buddy to continue."}`. If it says `Link Buddy using the code on its TFT`, the old Worker is still deployed.
 
-## Deploy the backend
+Cloudflare deployment is not automatic from this workspace. Wrangler is not authenticated here, and this workspace is not the GitHub Desktop clone.
 
-The changed backend files have been synced into the local `buddy-backend` GitHub Desktop clone. Commit and push them there, then wait for Cloudflare's Worker deployment. Make sure `wrangler.jsonc` is included: it replaces the old D1 binding with the `REMOTE_STATE` Durable Object binding. Keep the existing `DEVICE_TOKEN` Worker Secret. Old `ADMIN_TOKEN` and `ADMIN_PASSWORD` secrets are ignored by this version and can be removed from Cloudflare settings later.
+## Run the website on the laptop
 
-The existing D1 database is not deleted; this Worker simply stops using it. Do not put `DEVICE_TOKEN`, Wi-Fi credentials, or other secrets in GitHub.
+Run `npm run cloud-site` in this folder, then open `http://localhost:4176/`. The same server serves `companion-app` and proxies `/api/v2/*` to the deployed HTTPS Worker. Create a user or carer account with a unique username and password; use **Log in** on the same screen when returning. No email is required. Connect the ESP to internet Wi-Fi, and enter its eight-digit TFT code under **My Buddy**. The ESP's `DEVICE_TOKEN` must match the Worker secret. The site uses a fresh cloud account; local Care Hub accounts are not migrated. The current localhost form needs this updated Worker deployed before registration will succeed.
 
-## Run the control page on localhost
+`npm test` checks the relay and local page. The optional `tests/cloud_flow.mjs` checks fresh registration, pairing, settings sync, messages, and call signaling against a locally running Wrangler Worker with a synthetic `DEVICE_TOKEN`; it never uses real accounts. Cloud build and firmware compile do not prove physical audio/video quality.
 
-From this folder on the laptop, run `npm run local-page` and open `http://localhost:4175/`. The page is served on the laptop's loopback interface and forwards only its pairing and control API calls over HTTPS to the deployed Worker. No browser CORS change is needed. On a phone, use the Worker's HTTPS webpage instead; `localhost` on the phone is not the laptop.
+## Important limits
 
-1. Upload the updated firmware from `../firmware/remote_control_test` to the ESP with PlatformIO. Its local, Git-ignored `config.h` already contains the Worker URL, Wi-Fi, and `DEVICE_TOKEN` values from the earlier test.
-2. When Buddy connects, read the **LINK CODE** at the bottom of its TFT.
-3. Enter that code at `http://localhost:4175/` and click **Link Buddy**.
-4. Type text and click **Send to Buddy**. The ESP polls every five seconds; the page shows when it confirms the message.
-
-If the live Worker still has the old D1 code, linking will fail until the updated backend is committed, pushed, and deployed. `GET /health` alone only proves the Worker URL responds; it does not prove the pairing API is deployed.
-
-## API
-
-| Route | Caller | Purpose |
-| --- | --- | --- |
-| `GET /health` | anyone | Confirm the Worker is deployed. |
-| `GET /api/device/pairing` | ESP device token | Issue or fetch the current 8-digit TFT code. |
-| `POST /api/pair` | browser with TFT code | Exchange a one-use code for a browser session. |
-| `GET /api/status` | linked browser session | Read text and device confirmation. |
-| `POST /api/message` | linked browser session | Send 1–120 characters of text. |
-| `GET /api/device/config` | ESP device token | Fetch the latest text and revision. |
-| `POST /api/device/ack` | ESP device token | Confirm a displayed revision. |
-
-The ESP uses `Authorization: Bearer <device token>`. After pairing, the browser uses `Authorization: Bearer <session token>`, stored only in the current browser tab's session storage. Do not send private health information in test messages; this is not emergency infrastructure or a production authentication system.
-
-Run `npm test` for local route and localhost-page tests.
+This is an ideathon prototype, not a medical or emergency service. D1 stores care data as a single JSON snapshot behind one Durable Object: appropriate for a demonstration but not a production multi-device architecture. Real-time audio/video is relayed as short polling requests, not WebRTC to the ESP; expect latency and bandwidth limits. The website camera requires a secure browser context for phone use. Care-circle alerts require a person to see/respond; there is no cellular emergency connection. Never publish API keys, Wi-Fi credentials, or device tokens.

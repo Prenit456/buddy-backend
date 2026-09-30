@@ -1,0 +1,10 @@
+{
+  "name": "Buddy Care",
+  "short_name": "Buddy",
+  "description": "Buddy user and supervisor care circles, reminders and calls.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8f3",
+  "theme_color": "#163f37",
+  "icons": [{"src":"/assets/buddy-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
