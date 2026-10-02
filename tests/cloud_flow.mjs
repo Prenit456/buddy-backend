@@ -78,11 +78,21 @@ const sos = await api(`/api/v2/circles/${circle}/bridge/api/actions`, {
   method: 'POST', token: ownerToken, body: { action: 'sos' } });
 assert.equal(sos.status, 200);
 const afterSos = await api(`/api/v2/circles/${circle}`, { token: ownerToken });
-assert.ok(afterSos.value.alerts.some(alert => alert.kind === 'sos' && !alert.resolvedAt));
+assert.equal(afterSos.value.alerts.some(alert => alert.kind === 'sos' && !alert.resolvedAt),false,'A queued countdown must not pretend an SOS was delivered');
+await api('/api/device/sync',{method:'POST',token:deviceToken,body:{appliedRevision:saved.value._revision,ack:[],status:{mode:'ready',activeReminderId:'demo-reminder',wakeReady:true,clockValid:true},events:[{eventId:randomUUID(),type:'sos_escalated',reminderId:'button',createdAt:Date.now(),message:'Synthetic device help alert'}]}});
+assert.ok((await api(`/api/v2/circles/${circle}`,{token:ownerToken})).value.alerts.some(alert=>alert.kind==='sos'));
+const spoken=afterMessage.value.commands.find(command=>command.type==='say');
+await api('/api/device/sync',{method:'POST',token:deviceToken,body:{appliedRevision:saved.value._revision,ack:[spoken.id],status:{mode:'ready',activeReminderId:'demo-reminder'},events:[{eventId:randomUUID(),type:'command_result',reminderId:spoken.id,message:'displayed; speech queued',createdAt:Date.now()}]}});
+assert.ok((await api(`/api/v2/circles/${circle}`,{token:ownerToken})).value.messages[0].deliveredAt);
+const voiceSnooze=await api('/api/device/assistant',{method:'POST',token:deviceToken,body:{message:'Hi ESP, snooze reminder'}});
+assert.equal(voiceSnooze.status,200,JSON.stringify(voiceSnooze.value));assert.equal(voiceSnooze.value.model,'local-care-actions');
+const agenda=await api('/api/device/assistant',{method:'POST',token:deviceToken,body:{message:'What is my schedule today?'}});
+assert.equal(agenda.status,200,JSON.stringify(agenda.value));assert.match(agenda.value.answer,/no reminders/);
 
 const call = await api(`/api/v2/circles/${circle}/calls`, { method: 'POST',
   token: supervisor.value.token, body: { to: deviceId, kind: 'video' } });
 assert.equal(call.status, 201, JSON.stringify(call.value));
+assert.equal((await api(`/api/v2/calls/${call.value.call.id}/media`,{method:'POST',token:supervisor.value.token,body:{audio:'AAAA'}})).status,409,'No microphone relay before physical acceptance');
 const ringing = await api('/api/device/sync', { method: 'POST', token: deviceToken,
   body: { appliedRevision: saved.value._revision, capabilities: { camera: true, audio: true },
     status: { mode: 'ready' }, ack: [], events: [] } });
@@ -95,4 +105,29 @@ assert.equal(accepted.status, 200);
 assert.ok(accepted.value.commands.some(command => command.type === 'call_start'));
 const current = await api(`/api/v2/calls/${call.value.call.id}`, { token: supervisor.value.token });
 assert.equal(current.value.call.status, 'accepted');
-console.log('Cloud accounts, D1 settings, pairing, messages, SOS alert, and call signaling passed.');
+const pcm=Buffer.alloc(16000,0).toString('base64');
+await api(`/api/v2/calls/${call.value.call.id}/media`,{method:'POST',token:supervisor.value.token,body:{audio:pcm,after:0}});
+const toEsp=await api('/api/device/media',{method:'POST',token:deviceToken,body:{callId:call.value.call.id,after:0}});
+assert.equal(toEsp.value.audio[0].audio,pcm);
+await api('/api/device/media',{method:'POST',token:deviceToken,body:{callId:call.value.call.id,audio:pcm,after:toEsp.value.audio[0].seq}});
+const toApp=await api(`/api/v2/calls/${call.value.call.id}/media`,{method:'POST',token:supervisor.value.token,body:{after:0}});
+assert.equal(toApp.value.audio[0].audio,pcm,'PCM relay is bidirectional');
+await api(`/api/v2/calls/${call.value.call.id}/end`,{method:'POST',token:supervisor.value.token,body:{}});
+assert.equal((await api('/api/device/media',{method:'POST',token:deviceToken,body:{callId:call.value.call.id,audio:pcm}})).status,409,'Ended calls cannot keep relaying microphone data');
+const checkin=await api(`/api/v2/circles/${circle}/calls`,{method:'POST',token:supervisor.value.token,body:{to:deviceId,kind:'camera'}});
+assert.equal(checkin.status,201);
+await api('/api/device/sync',{method:'POST',token:deviceToken,body:{appliedRevision:saved.value._revision,ack:[],events:[{eventId:randomUUID(),type:'call_control',reminderId:'accept',createdAt:Date.now()}],status:{mode:'call'}}});
+const cameraCall=(await api(`/api/v2/calls/${checkin.value.call.id}`,{token:supervisor.value.token})).value.call;
+assert.ok(cameraCall.expiresAt-Date.now()<=120000);
+assert.equal((await api('/api/device/media',{method:'POST',token:deviceToken,body:{callId:cameraCall.id,audio:pcm}})).status,400,'Camera-only check-ins forbid audio');
+await api(`/api/v2/calls/${cameraCall.id}/end`,{method:'POST',token:supervisor.value.token,body:{}});
+const dial=await api('/api/device/assistant',{method:'POST',token:deviceToken,body:{message:'call family'}});
+assert.equal(dial.status,200,JSON.stringify(dial.value));
+const dialSync=await api('/api/device/sync',{method:'POST',token:deviceToken,body:{appliedRevision:saved.value._revision,ack:[],events:[],status:{mode:'ready'}}});
+assert.ok(dialSync.value.commands.some(command=>command.type==='call_dialing'));
+const ownerMessage=await api(`/api/v2/circles/${circle}/messages`,{method:'POST',token:ownerToken,body:{message:'Owner can test the speaker too'}});
+assert.ok(ownerMessage.value.message.commandIds.length);
+const unlink=await api(`/api/v2/circles/${circle}/devices/unpair`,{method:'POST',token:ownerToken,body:{deviceId}});
+assert.equal(unlink.status,200);
+assert.equal((await api('/api/device/pairing',{token:deviceToken})).value.paired,false);
+console.log('Cloud D1 accounts/settings, pairing, receipts, wake voice actions, SOS lifecycle, incoming/outgoing calls, PCM relay, camera consent and unpairing passed.');

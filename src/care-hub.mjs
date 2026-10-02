@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateCareSettings, validDate } from './care.mjs';
+import { voiceIntent, agendaAnswer } from './voice-actions.mjs';
 
 const scrypt=promisify(scryptCallback), hash=s=>createHash('sha256').update(String(s)).digest('hex');
 const token=()=>randomBytes(32).toString('base64url'), code=()=>randomBytes(6).toString('hex').toUpperCase();
@@ -81,7 +82,7 @@ export class CareHub {
     const item={id:id('cmd'),type,payload,createdAt:Date.now(),expiresAt:Date.now()+600000};d.commands.push(item);d.commands=d.commands.slice(-50);
     return item;
   }
-  publicDevice(d){return {id:d.id,name:d.name,capabilities:d.capabilities,lastSeen:d.lastSeen||null,online:Date.now()-(d.lastSeen||0)<20000,appliedRevision:d.appliedRevision||0,status:d.status||{},syncError:d.syncError||null};}
+  publicDevice(d){return {id:d.id,name:d.name,capabilities:d.capabilities,lastSeen:d.lastSeen||null,online:Date.now()-(d.lastSeen||0)<20000,appliedRevision:d.appliedRevision||0,status:d.status||{},results:d.results||[],syncError:d.syncError||null};}
   summary(c,u){
     const member=c.members.find(m=>m.userId===u.id);
     return {id:c.id,name:c.name,ownerId:c.ownerId,revision:c.revision,permissions:{canEdit:u.id===c.ownerId||member.canEdit,canCall:u.id===c.ownerId||member.canCall,canCamera:u.id===c.ownerId||member.canCamera},privacy:c.privacy};
@@ -117,6 +118,13 @@ export class CareHub {
       }
       return;
     }
+    if(type==='command_result'){
+      const result={id:eventId,commandId:reminderId,at:iso(),result:text(e.message,240)};
+      d.results=[...(d.results||[]),result].slice(-40);
+      const message=c.messages.find(m=>m.commandIds?.includes(reminderId));
+      if(message){message.deliveredAt=iso();message.delivery=result.result;}
+      return;
+    }
     const allowed=['reminder_due','reminder_acknowledged','reminder_snoozed','reminder_missed','sos_started','sos_cancelled','sos_escalated','check_in','hydration'];
     if(!allowed.includes(type))return;
     const occurred=Number(e.createdAt),at=Number.isFinite(occurred)&&occurred>=1700000000000&&occurred<=Date.now()+60000?new Date(occurred):new Date();
@@ -124,10 +132,27 @@ export class CareHub {
     if(type==='sos_escalated')this.alert(c,'Buddy needs help','An SOS was raised on '+d.name+'. A supervisor should respond now.','sos',eventId);
     if(type==='reminder_missed')this.alert(c,'A reminder needs a check-in',text(e.message),'reminder',eventId);
     if(type==='check_in'){
-      c.lastCheckin={at:iso(),mood:reminderId};
+      c.lastCheckin={at:at.toISOString(),mood:reminderId};
       for(const check of c.checkins)if(['waiting','overdue'].includes(check.status)&&at>=new Date(check.at)) {check.status='answered';check.answer=reminderId;check.answeredAt=iso();}
-      if(['unwell','lonely'].includes(reminderId))this.alert(c,'A little company may help','The user reported feeling '+reminderId+'.','wellbeing',eventId);
+      if(['unwell','lonely','need_help'].includes(reminderId))this.alert(c,reminderId==='need_help'?'Help requested':'A check-in needs attention','The user reported feeling '+reminderId.replaceAll('_',' ')+'.',reminderId==='need_help'?'sos':'wellbeing',eventId);
     }
+  }
+  async voiceAction(d,message){
+    const c=this.db.circles.find(c=>c.id===d.circleId),intent=voiceIntent(message);
+    if(!c||!intent)return null;
+    if(intent.action==='agenda')return {answer:agendaAnswer(c.settings),model:'local-care-actions'};
+    if(intent.action==='time')return {answer:'It is '+new Intl.DateTimeFormat('en-IN',{timeZone:c.settings.device.timezone||'Asia/Kolkata',hour:'numeric',minute:'2-digit'}).format(new Date())+'.',model:'local-care-actions'};
+    if(intent.action==='call'){
+      const members=c.members.filter(m=>m.canCall&&m.userId!==c.ownerId);
+      const target=members.find(m=>this.peerName(m.userId).toLowerCase()===intent.name)||(['family','carer','supervisor'].includes(intent.name)?members[0]:null);
+      if(!target)return {answer:'That person is not in your care circle. Ask them to join in the app.',model:'local-care-actions'};
+      try{this.createCall(c,d.id,target.userId,'audio');await this.commit();return {answer:'Calling '+this.peerName(target.userId)+'.',model:'local-care-actions'};}
+      catch(error){return {answer:error.message,model:'local-care-actions'};}
+    }
+    if(['acknowledge','snooze'].includes(intent.action)&&!d.status?.activeReminderId)return {answer:'There is no active reminder to '+(intent.action==='snooze'?'snooze':'confirm')+'.',model:'local-care-actions'};
+    const item=this.command(d,'action',{...intent,reminderId:d.status?.activeReminderId||''});await this.commit();
+    const answers={sos:'Starting the help countdown. Press the button to cancel.',cancel_sos:'Cancelling the help request.',snooze:'I will snooze the active reminder.',acknowledge:'I will record your confirmation of the active reminder.',hydration:'I will record your water check-in.',check_in:'Thank you. I will share how you are feeling with your care circle.'};
+    return {answer:answers[intent.action],commandId:item.id,model:'local-care-actions'};
   }
   peerName(peer){return this.db.users.find(u=>u.id===peer)?.name||this.db.devices.find(d=>d.id===peer)?.name||'Buddy';}
   createCall(c,from,to,kind){
@@ -146,6 +171,7 @@ export class CareHub {
     const call={id:id('call'),circleId:c.id,from,to,fromName:this.peerName(from),toName:this.peerName(to),kind,transport:device?'buddy-media':'webrtc',status:'ringing',createdAt:iso(),expiresAt:Date.now()+45000,signals:0};
     this.db.calls.push(call);this.db.calls=this.db.calls.slice(-300);
     if(device&&to===device.id)this.command(device,'call_ring',{callId:call.id,name:call.fromName,kind});
+    if(device&&from===device.id)this.command(device,'call_dialing',{callId:call.id,name:call.toName,kind,expiresAt:call.expiresAt});
     this.audit(c,call.fromName,(kind==='camera'?'Requested a camera check-in with ':'Started a '+kind+' call to ')+call.toName);return call;
   }
   acceptCall(call,c){
@@ -253,7 +279,8 @@ export class CareHub {
           const before=JSON.stringify({capabilities:d.capabilities,appliedRevision:d.appliedRevision,status:d.status,syncError:d.syncError,commands:d.commands});
           if(b.capabilities)d.capabilities={camera:b.capabilities.camera===true,audio:b.capabilities.audio===true};
           d.appliedRevision=Math.min(c.revision,Math.max(0,Number(b.appliedRevision)||0));
-          d.status={mode:text(b.status?.mode,30),batteryPercent:Number.isFinite(b.status?.batteryPercent)?b.status.batteryPercent:null,headline:text(b.status?.headline),detail:text(b.status?.detail),activeReminderId:text(b.status?.activeReminderId,100)};
+          d.name=text(c.settings.device.deviceName,70)||'Buddy';
+          d.status={mode:text(b.status?.mode,30),batteryPercent:Number.isFinite(b.status?.batteryPercent)?b.status.batteryPercent:null,headline:text(b.status?.headline),detail:text(b.status?.detail),activeReminderId:text(b.status?.activeReminderId,100),wakeReady:b.status?.wakeReady===true,microphoneEnabled:b.status?.microphoneEnabled!==false,freeMemory:Number(b.status?.freeMemory)||0,firmwareVersion:text(b.status?.firmwareVersion,40),pendingEvents:Number(b.status?.pendingEvents)||0,clockValid:b.status?.clockValid===true};
           d.syncError=b.syncError?text(b.syncError):null;
           const ack=Array.isArray(b.ack)?b.ack.slice(0,50):[];d.commands=d.commands.filter(cmd=>cmd.expiresAt>Date.now()&&!ack.includes(cmd.id));
           for(const event of (Array.isArray(b.events)?b.events:[]).slice(0,40))await this.deviceEvent(d,event);
@@ -273,7 +300,7 @@ export class CareHub {
       }
       const u=this.actor(req);
       if(p==='/api/v2/auth/logout'&&method==='POST'){this.db.sessions=this.db.sessions.filter(s=>s.hash!==hash(this.bearer(req)));await this.commit();return send({ok:true});}
-      if(p==='/api/v2/me'&&method==='GET')return send({user:safeUser(u),circles:this.db.circles.filter(c=>c.members.some(m=>m.userId===u.id)).map(c=>this.summary(c,u)),iceServers:JSON.parse(process.env.BUDDY_ICE_SERVERS||'[]'),deviceServerUrl:this.services.publicDeviceUrl||null});
+      if(p==='/api/v2/me'&&method==='GET')return send({user:safeUser(u),circles:this.db.circles.filter(c=>c.members.some(m=>m.userId===u.id)).map(c=>this.summary(c,u)),iceServers:this.services.iceServers||[{urls:'stun:stun.cloudflare.com:3478'}],deviceServerUrl:this.services.publicDeviceUrl||null});
       if(p==='/api/v2/join'&&method==='POST'){
         this.rate(req,'join',15);if(u.role!=='supervisor')fail(400,'Supervisor accounts join care circles.');
         const b=await bodyJson(req),invite=this.db.invites.find(i=>i.hash===hash(text(b.code,20).toUpperCase())&&!i.used&&i.expires>Date.now());if(!invite)fail(400,'This invitation is invalid or expired.');
@@ -329,6 +356,12 @@ export class CareHub {
         if(d.cloud)await this.services.remoteLink(c.id,d.id);
         return send({device:this.publicDevice(d)});
       }
+      if(path==='/devices/unpair'&&method==='POST'){
+        this.owner(u,c);const d=this.db.devices.find(d=>d.id===b.deviceId&&d.circleId===c.id);if(!d)fail(404,'Device not found.');
+        for(const call of this.db.calls.filter(call=>active(call)&&(call.to===d.id||call.from===d.id)))this.endCall(call);
+        this.db.devices=this.db.devices.filter(item=>item.id!==d.id);this.audit(c,u.name,'Unpaired '+d.name);await this.commit();
+        if(d.cloud)await this.services.remoteUnlink();return send({ok:true});
+      }
       if(path==='/calls'&&method==='POST'){
         this.circle(u,c.id,b.kind==='camera'?'canCamera':'canCall');const call=this.createCall(c,u.id,text(b.to,80),b.kind||'audio');await this.commit();return send({call},201);
       }
@@ -353,7 +386,8 @@ export class CareHub {
       if(path==='/messages'&&method==='POST'){
         this.circle(u,c.id,'canCall');const message=text(b.message);if(!message)fail(400,'Write a message first.');
         const item={id:id('msg'),from:u.name,message,at:iso()};c.messages.unshift(item);c.messages=c.messages.slice(0,100);
-        if(u.id!==c.ownerId)for(const d of this.db.devices.filter(d=>d.circleId===c.id))this.command(d,'say',{headline:'Message from '+u.name,message});
+        item.commandIds=[];
+        for(const d of this.db.devices.filter(d=>d.circleId===c.id))item.commandIds.push(this.command(d,'say',{headline:'Message from '+u.name,message,messageId:item.id}).id);
         await this.commit();return send({message:item});
       }
       fail(404,'Unknown care-circle operation.');
@@ -364,21 +398,20 @@ export class CareHub {
     const device=this.db.devices.find(d=>d.circleId===c.id);
     if(path==='/api/settings'&&method==='GET')return send({...c.settings,_revision:c.revision});
     if(path==='/api/settings'&&method==='PUT'){this.circle(u,c.id,'canEdit');const b=await bodyJson(req);return send(await this.saveSettings(c,u,b,b._revision));}
-    if(path==='/api/status'&&method==='GET')return send({...(device?.status||{}),online:device?this.publicDevice(device).online:false,paired:!!device,lastSeen:device?.lastSeen||null,syncError:device?.syncError||null,deviceName:device?.name||'No Buddy paired',ip:'Cloudflare',firmwareVersion:device?'ESP32-S3':'—',events:c.journal.slice(-20),audioMode:'cloud-gateway',settingsRevision:c.revision,appliedRevision:device?.appliedRevision||0});
+    if(path==='/api/status'&&method==='GET')return send({...(device?.status||{}),online:device?this.publicDevice(device).online:false,paired:!!device,lastSeen:device?.lastSeen||null,syncError:device?.syncError||null,deviceName:device?.name||'No Buddy paired',ip:'Cloudflare',firmwareVersion:device?.status?.firmwareVersion||'—',events:c.journal.slice(-20),commandResults:device?.results||[],audioMode:'cloud-gateway',settingsRevision:c.revision,appliedRevision:device?.appliedRevision||0});
     if(path==='/api/journal'&&method==='GET')return send({events:c.journal});
     if(path==='/api/calendar'&&method==='GET'){const month=url.searchParams.get('month')||this.date(c).slice(0,7);if(!validDate(month+'-01'))fail(400,'Choose a valid month.');return send(calendar(c,month,this.date(c)));}
     if(path==='/api/actions'&&method==='POST'){
       this.circle(u,c.id,'canEdit');const b=await bodyJson(req);if(!device)fail(409,'Pair Buddy first.');
-      if(['sos','cancel_sos','snooze','acknowledge','check_in'].includes(b.action)){
-        if(b.action==='sos'){
-          const eventId=id('evt');
-          this.alert(c,'Buddy needs help',u.name+' raised an SOS in the app. A supervisor should respond now.','sos',eventId);
-          c.journal.push({id:eventId,at:iso(),date:this.date(c),type:'sos_escalated',reminderId:'app',message:u.name+' raised an SOS in the app'});
-        }
-        if(b.action==='cancel_sos')for(const alert of c.alerts)if(alert.kind==='sos'&&!alert.resolvedAt)alert.resolvedAt=iso();
-        this.command(device,'action',b);
-      }else if(b.action==='say')this.command(device,'say',b);else fail(400,'Unknown Buddy action.');
-      await this.commit();return send({ok:true});
+      const allowed=['sos','cancel_sos','snooze','acknowledge','check_in','hydration','agenda','ping'];
+      let command;
+      if(b.action==='agenda')command=this.command(device,'say',{message:agendaAnswer(c.settings).slice(0,500)});
+      else if(allowed.includes(b.action))command=this.command(device,'action',{action:b.action,reminderId:text(b.reminderId,100)});
+      else if(b.action==='say'){
+        if(!text(b.message))fail(400,'Write a message first.');
+        command=this.command(device,'say',{message:text(b.message),headline:text(b.headline,80)});
+      }else fail(400,'Unknown Buddy action.');
+      await this.commit();return send({ok:true,commandId:command.id,delivery:'queued',online:this.publicDevice(device).online});
     }
     if(path==='/api/time'&&method==='POST')return send({ok:true});
     if(path==='/api/assistant'&&method==='POST'){this.rate(req,'assistant:'+u.id,30);const b=await bodyJson(req);return send(await this.services.assistant(b.message,b.history||[],c.settings));}

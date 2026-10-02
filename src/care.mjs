@@ -11,20 +11,30 @@ export function validateCareSettings(value) {
   if (!Array.isArray(value.contacts) || value.contacts.length > 12) return 'Use no more than 12 contacts';
   if (!Array.isArray(value.reminders) || value.reminders.length > 64) return 'Use no more than 64 scheduled times';
   if (value.device?.callName && !/^[a-zA-Z][a-zA-Z ]{1,23}$/.test(value.device.callName.trim())) return 'Choose a call name with 2–24 letters';
-  if (value.display?.orientation && !['landscape','portrait'].includes(value.display.orientation)) return 'Choose portrait or landscape';
+  if (value.display?.orientation && value.display.orientation!=='landscape') return 'The current hardware supports landscape 320 × 240 only';
+  const numeric=[['voice','rate',40,120],['voice','volume',0,100],['voice','repeatCount',1,3],['display','eyeColor',0,65535],['safety','sosCountdownSeconds',3,30],['safety','missedReminderMinutes',1,120]];
+  for(const [section,key,min,max] of numeric)if(value[section]?.[key]!==undefined&&(!Number.isInteger(value[section][key])||value[section][key]<min||value[section][key]>max))return `Invalid ${key}: use ${min}–${max}`;
+  if(value.voice?.voiceId&&!['bella','sarah','brian','daniel'].includes(value.voice.voiceId))return 'Choose one of the supported voices';
+  if(value.preferences?.privacyMode&&!['wake-phrase','microphone-off'].includes(value.preferences.privacyMode))return 'Choose hands-free listening or microphone off';
+  const zones={'Asia/Kolkata':'IST-5:30','UTC':'UTC0','Europe/London':'GMT0BST,M3.5.0/1,M10.5.0','America/New_York':'EST5EDT,M3.2.0,M11.1.0'};
+  if(!zones[value.device?.timezone||'Asia/Kolkata'])return 'Choose one of the hardware-supported time zones';
+  if(value.device?.timezonePosix&&value.device.timezonePosix!==zones[value.device.timezone||'Asia/Kolkata'])return 'The app and device timezone must match';
   try { new Intl.DateTimeFormat('en',{timeZone:value.device?.timezone||'Asia/Kolkata'}); } catch { return 'Choose a valid timezone'; }
   if (['quietStart','quietEnd'].some(k=>value.safety?.[k] && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value.safety[k]))) return 'Set valid quiet-hour times';
-  if (value.device?.voiceServerUrl && !/^http:\/\/[a-zA-Z0-9.:-]+\/?$/.test(value.device.voiceServerUrl)) return 'Use the trusted local companion address, such as http://192.168.1.20:4173';
+  if(value.device?.voiceServerUrl)return 'Local voice gateways are not used in the Cloudflare build';
   const ids = new Set();
   for (const r of value.reminders) {
     if (!r || typeof r.id !== 'string' || !r.id || ids.has(r.id)) return 'Every reminder needs a unique ID';
     ids.add(r.id);
     if (typeof r.title !== 'string' || !r.title.trim() || r.title.length > 120) return 'Give each reminder a short title';
+    if(r.id.length>100||String(r.detail||'').length>240)return 'Keep reminder instructions under 240 characters';
+    if(r.snoozeMinutes!==undefined&&(!Number.isInteger(r.snoozeMinutes)||r.snoozeMinutes<1||r.snoozeMinutes>120))return 'Snooze must be 1–120 minutes';
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time || '')) return `Invalid time for ${r.title}`;
     if (!Array.isArray(r.days) || !r.days.length || r.days.some(d => !Number.isInteger(d) || d < 0 || d > 6)) return `Choose at least one weekday for ${r.title}`;
     if ((r.startDate && !validDate(r.startDate)) || (r.endDate && !validDate(r.endDate))) return `Invalid date for ${r.title}`;
     if (r.startDate && r.endDate && r.endDate < r.startDate) return `End date precedes start date for ${r.title}`;
   }
+  if(JSON.stringify(value).length>36000)return 'Settings are too large for this Buddy; shorten reminder text';
   return null;
 }
 

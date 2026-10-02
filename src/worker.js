@@ -43,7 +43,7 @@ export class RemoteState extends DurableObject {
         attempts: 0, lockedUntil: 0, used: false };
       await this.ctx.storage.put('pairing', pairing);
     }
-    return { code: pairing.code, expiresAt: pairing.expiresAt };
+    return { paired:false, code: pairing.code, expiresAt: pairing.expiresAt };
   }
 
   async pair(code) {

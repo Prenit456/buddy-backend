@@ -1,5 +1,5 @@
-const CACHE = "buddy-care-circle-v10";
-const APP = ["/", "/portal.html", "/portal.css", "/portal.js", "/device-preview.js", "/calls.js", "/session.js", "/settings", "/styles.css", "/care-ui.css", "/app.js", "/care-ui.js", "/assets/buddy-mark.svg", "/manifest.json"];
+const CACHE = "buddy-care-circle-v11";
+const APP = ["/", "/portal.html", "/portal.css", "/portal.js", "/hardware-controls.js", "/device-preview.js", "/calls.js", "/session.js", "/settings", "/styles.css", "/care-ui.css", "/app.js", "/care-ui.js", "/assets/buddy-mark.svg", "/manifest.json"];
 
 self.addEventListener("install", event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP)).then(()=>self.skipWaiting())));
 self.addEventListener("activate", event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(()=>self.clients.claim())));

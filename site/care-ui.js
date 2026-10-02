@@ -4,7 +4,7 @@ export function initCareUI({state,api,saveSettings,renderCollections,bindSetting
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:state.settings.device.timezone||'Asia/Kolkata'}).format(new Date());
  let month=today().slice(0,7), selected=today(), calendar=null, journal=[],photo=null,draft=[];
- async function request(path,value){const base=state.settings.device.voiceServerUrl?.replace(/\/$/,'')||state.apiBase;const r=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value),signal:AbortSignal.timeout(150000)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data;}
+ async function request(path,value){const r=await fetch(state.apiBase+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value),signal:AbortSignal.timeout(150000)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data;}
  async function loadCalendar(){
   try{
    calendar=await api('/api/calendar?month='+month);

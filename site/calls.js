@@ -71,7 +71,13 @@ export class BuddyCalls {
    if(Date.now()>call.expiresAt){this.stop();return;}
    try{
     const body={callId:call.id,after:this.after,frameAfter:this.frameAfter};
-    if(this.chunks.length){const chunks=this.chunks.splice(0,3);let binary='';for(const chunk of chunks)binary+=String.fromCharCode(...chunk);body.audio=btoa(binary);}
+    if(this.chunks.length){
+     // Keep the same 16 KiB PCM bound as the ESP and Worker, including phones
+     // whose AudioContext runs at 16 kHz rather than the usual 44.1/48 kHz.
+     let binary='',bytes=0;
+     while(this.chunks.length&&bytes<16384){const chunk=this.chunks[0],take=Math.min(chunk.length,16384-bytes);binary+=String.fromCharCode(...chunk.subarray(0,take));bytes+=take;if(take===chunk.length)this.chunks.shift();else this.chunks[0]=chunk.subarray(take);}
+     body.audio=btoa(binary);
+    }
     if(video&&Date.now()-this.lastFrame>600&&this.$('#localVideo').readyState>=2){this.captureCanvas.getContext('2d').drawImage(this.$('#localVideo'),0,0,320,240);body.jpeg=this.captureCanvas.toDataURL('image/jpeg',.55).split(',')[1];this.lastFrame=Date.now();}
     const result=await this.request(this.isDevice?'/circles/'+this.circle+'/device-call/media':'/calls/'+call.id+'/media',body);
     if(generation!==this.generation)return;

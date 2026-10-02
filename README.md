@@ -1,5 +1,8 @@
 # Buddy cloud backend (Cloudflare Worker + D1)
 
+See [hardware integration and activation](docs/HARDWARE-INTEGRATION.md) for this
+version's connected features, verification and remaining physical limitations.
+
 This folder contains the Buddy care-circle API, remote ESP relay, D1 migration, and a localhost website server. The ESP and browser use HTTPS to reach the same Worker; they do not need to share Wi-Fi. The old `care-hub` Node server is not used by this path. The older text-only relay page is retained at `/remote-test` for historical tests, but it cannot replace the full care-circle website.
 
 ## Before the website can work against Cloudflare
@@ -7,7 +10,7 @@ This folder contains the Buddy care-circle API, remote ESP relay, D1 migration, 
 1. Copy **this folder's complete contents** into the root of the `buddy-backend` GitHub Desktop clone, replacing that clone's old Worker files. Also copy the sibling `companion-app` folder into the clone as `site/` so its localhost website and tests work independently. Keep the clone's `.git` folder. Do not copy `.env.local`, private `config.h`, `.wrangler`, or `.pio` files.
 2. Commit and push with GitHub Desktop. Check that the Cloudflare Worker builds and deploys from the new commit. `wrangler.jsonc` already has the supplied D1 UUID and both Durable Object bindings.
 3. The Worker now creates its missing `buddy_state` table automatically on the first care request; it does not overwrite an existing table. The same SQL is in `migrations/0001_care_state.sql` if you prefer to apply it manually to the **remote** `buddy` D1 database. Do not confuse `--local` with the live database.
-4. In the Worker Settings → Variables and Secrets, retain the `DEVICE_TOKEN` secret used by the ESP. Set `ELEVENLABS_API_KEY` for primary speech and transcription, `GEMINI_API_KEY` for speech fallback and prescription-photo reading, and `GROQ_API_KEY` for AI chat. `OPENROUTER_API_KEY` is an optional chat fallback. Keep all keys as Worker secrets, not GitHub files or browser code. The default Gemini fallback speech model is `gemini-3.8-flash-tts`; if your account uses another compatible TTS model, set `GEMINI_TTS_MODEL` as a Worker variable.
+4. In the Worker Settings → Variables and Secrets, retain the `DEVICE_TOKEN` secret used by the ESP. Set `ELEVENLABS_API_KEY` for primary speech and transcription, `GEMINI_API_KEY` for speech fallback and prescription-photo reading, and `GROQ_API_KEY` for AI chat. `OPENROUTER_API_KEY` and `NVIDIA_API_KEY` are optional chat fallbacks. Keep all keys as Worker secrets, not GitHub files or browser code. The default Gemini fallback speech model is `gemini-2.5-flash-preview-tts`. The private `npm run secrets:upload` helper imports saved key pools after Wrangler login.
 5. Verify `/api/v2/me` without a session returns `{"error":"Log in to Buddy to continue."}`. If it says `Link Buddy using the code on its TFT`, the old Worker is still deployed.
 
 Cloudflare deployment is not automatic from this workspace. Wrangler is not authenticated here, and this workspace is not the GitHub Desktop clone.

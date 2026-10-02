@@ -264,7 +264,7 @@ async function pollStatus() {
 
 function renderStatus() {
   const status = state.status;
-  // A successful Care Hub request is not proof that the physical device is
+  // A successful cloud request is not proof that the physical device is
   // online. Keep hub reachability for saving queued settings, but render the
   // device heartbeat separately.
   const online = state.connected && (!inHub || status?.online === true);
@@ -279,7 +279,7 @@ function renderStatus() {
   $("#factStatus").textContent = online ? title(status?.mode || "online") : "Offline";
   $("#factIp").textContent = status?.ip || "—";
   $("#factFirmware").textContent = status?.firmwareVersion || "—";
-  $("#factMemory").textContent = status?.freeHeap ? `${Math.round(status.freeHeap / 1024)} KB heap` : "—";
+  $("#factMemory").textContent = status?.freeMemory ? `${Math.round(status.freeMemory / 1024)} KB heap` : "—";
   $("#factAudio").textContent = status?.audioMode ? title(status.audioMode) : "—";
 
   const pupils = $$(".mini-eye i");
@@ -294,7 +294,7 @@ function renderStatus() {
   events.slice(-6).reverse().forEach(event => {
     const row = document.createElement("div");
     row.className = "activity-item";
-    row.innerHTML = `<i></i><span><b>${escapeHtml(event.message)}</b><small>${escapeHtml(title(event.type))}</small></span><time>${formatUptime(event.atMs)}</time>`;
+    row.innerHTML = `<i></i><span><b>${escapeHtml(event.message)}</b><small>${escapeHtml(title(event.type))}</small></span><time>${event.at?new Date(event.at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):formatUptime(event.atMs)}</time>`;
     list.append(row);
   });
 }
@@ -304,7 +304,7 @@ async function action(name, details = {}) {
   try {
     await api("/api/actions", { method: "POST", body: JSON.stringify({ action: name, ...details }) });
     await pollStatus();
-    toast(name === "sos" ? "SOS countdown started" : "Buddy received the action");
+    toast("Queued for Buddy. Check My Buddy for device delivery.");
   } catch (error) { toast(error.message, true); }
 }
 
@@ -325,8 +325,8 @@ async function previewVoice() {
   $("#previewVoice").textContent = "Preparing natural voice…";
   try {
     if (previewAudio) { previewAudio.pause(); URL.revokeObjectURL(previewAudio.src); }
-    const base=state.settings.device.voiceServerUrl?.replace(/\/$/,'')||state.apiBase;
-    const response = await fetch(`${base}/api/tts`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ text, voiceId:state.settings.voice.voiceId, language:state.settings.person.language, rate:state.settings.voice.rate }),signal:AbortSignal.timeout(35000) });
+    const base=state.apiBase;
+    const response = await fetch(`${base}/api/tts`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ text, voiceId:state.settings.voice.voiceId, language:state.settings.person.language, rate:state.settings.voice.rate }),signal:AbortSignal.timeout(75000) });
     if (!response.ok) throw new Error((await response.json()).error || "Voice service unavailable");
     const url = URL.createObjectURL(await response.blob());
     previewAudio = new Audio(url); previewAudio.volume = state.settings.voice.volume / 100;

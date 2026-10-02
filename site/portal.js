@@ -1,4 +1,5 @@
 import { BuddyCalls } from './calls.js';
+import { renderHardware } from './hardware-controls.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let token=sessionStorage.getItem('buddy.session')||'',me,view,tab='today',polling=false,editorKey='',editorPage='voice',todayItems=[],calendarAt=0,toastTimer,chatBusy=false;
 const chatSessions=new Map();
@@ -8,9 +9,13 @@ const circlePath=()=>'/circles/'+view.id;
 const owner=()=>view?.ownerId===me?.user.id;
 const time=s=>new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 const callUI=new BuddyCalls({request,toast,refresh});
+const speakReply=document.createElement('button');speakReply.type='button';speakReply.className='secondary';speakReply.textContent='Read this reply on Buddy';speakReply.disabled=true;
+$('#chatPanel .chat-suggestions').append(speakReply);
+speakReply.onclick=async()=>{try{const last=(chatSessions.get(view.id)||[]).filter(m=>m.role==='assistant').at(-1);if(!last)return;await request(circlePath()+'/messages',{message:last.content});toast('Reply queued for the real Buddy.');await refresh();}catch(error){toast(error.message);}};
 function renderChat(){
  const log=$('#chatLog');log.replaceChildren();log.dataset.circle=view?.id||'';
  const conversation=chatSessions.get(view?.id)||[];
+ speakReply.disabled=!view?.devices.length||!view?.permissions.canCall||!conversation.some(m=>m.role==='assistant');
  if(!conversation.length){const intro=document.createElement('p');intro.className='empty-note';intro.textContent='Hi, I’m Buddy. What is on your mind?';log.append(intro);}
  for(const entry of conversation){const bubble=document.createElement('div');bubble.className='chat-bubble '+entry.role;const label=document.createElement('strong');label.textContent=entry.role==='user'?'You':'Buddy';const content=document.createElement('p');content.textContent=entry.content;bubble.append(label,content);log.append(bubble);}
  log.scrollTop=log.scrollHeight;
@@ -59,7 +64,7 @@ async function refresh(){if(polling||!me)return;polling=true;try{
  $('#todayReminders').innerHTML=todayItems.length?todayItems.map(r=>'<div class="row"><span class="time-tag">'+esc(r.time)+'</span><div class="content"><b>'+esc(r.title)+'</b><p>'+esc(r.detail)+'</p><small>'+esc(r.status)+' · '+esc(r.kind)+'</small></div></div>').join(''):'<p class="empty-note">Room for a gentle routine. Add reminders in the calendar.</p>';
  const alerts=view.alerts.filter(a=>!a.resolvedAt);$('#alertCount').textContent=alerts.length+' open';$('#alerts').innerHTML=alerts.map(a=>'<div class="row"><div class="content"><b>'+esc(a.title)+'</b><p>'+esc(a.detail)+'</p><small>'+esc(a.claimedName?'Responding: '+a.claimedName:time(a.at))+'</small><div class="button-row"><button class="secondary" data-claim="'+a.id+'" '+(a.claimedBy?'disabled':'')+'>I’m responding</button><button class="text-button" data-resolve="'+a.id+'">Resolved</button></div></div></div>').join('')||'<p class="empty-note">Nothing needs attention right now. No alerts is not a guarantee that someone is safe.</p>';
  $('#tasks').innerHTML=view.tasks.slice(0,12).map(t=>'<div class="row"><div class="content"><b>'+esc(t.title)+'</b><small>'+esc(t.doneAt?'Completed':t.assignedTo?'Claimed by '+(view.members.find(m=>m.id===t.assignedTo)?.name||'a member'):'Unclaimed · '+t.createdBy)+'</small></div>'+(!t.doneAt?'<button class="secondary" data-task="'+t.id+'" data-mode="'+(t.assignedTo?'done':'claim')+'" '+(t.assignedTo&&t.assignedTo!==me.user.id&&!owner()?'disabled':'')+'>'+(t.assignedTo?'Complete':'I’ll help')+'</button>':'')+'</div>').join('')||'<p class="empty-note">Share errands and visits so nobody has to do it all.</p>';
- $('#messages').innerHTML=view.messages.slice(0,4).map(m=>'<div class="row"><div class="content"><b>'+esc(m.from)+'</b><p>'+esc(m.message)+'</p><small>'+time(m.at)+'</small></div></div>').join('');
+ $('#messages').innerHTML=view.messages.slice(0,4).map(m=>'<div class="row"><div class="content"><b>'+esc(m.from)+'</b><p>'+esc(m.message)+'</p><small>'+time(m.at)+' · '+esc(m.deliveredAt?m.delivery:'Queued for Buddy')+'</small></div></div>').join('');
  $('#audit').innerHTML=view.audit.slice(0,6).map(a=>'<div class="row"><div class="content"><b>'+esc(a.actor)+'</b> <small>'+esc(a.action)+'</small></div><small>'+time(a.at)+'</small></div>').join('')||'<p class="empty-note">Changes and care-circle activity will appear here.</p>';
  $('#people').innerHTML=view.members.map(m=>'<article class="card person-card"><div class="avatar">'+esc(m.name[0])+'</div><h3>'+esc(m.name)+'</h3><p>'+(m.id===view.ownerId?'Buddy user':'Supervisor')+' · '+(m.online?'App online':'App not currently open')+'</p>'+(m.id!==me.user.id?callButtons(m.id):'<span class="pill">That’s you</span>')+(owner()&&m.id!==view.ownerId?'<div class="permissions">'+['canEdit','canCall','canCamera'].map((p,i)=>'<label class="check"><input type="checkbox" data-permission="'+p+'" data-member="'+m.id+'" '+(m[p]?'checked':'')+'>'+['Edit settings','Audio & video calls','Request camera check-ins'][i]+'</label>').join('')+'<button class="text-button" data-remove="'+m.id+'">Remove from circle</button></div>':'')+'</article>').join('');
  $('#inviteSection').hidden=!owner();$('#pairSection').hidden=!owner();$('#cameraPrivacy').hidden=!owner();$('#cameraEnabled').checked=view.privacy.cameraRequests;
@@ -67,6 +72,7 @@ async function refresh(){if(polling||!me)return;polling=true;try{
  $('#deviceSettings').hidden=!view.permissions.canEdit;
  const settingsForm=$('#deviceSettingsForm'),settingsKey=view.id+':'+view.revision;
  if(settingsForm.dataset.settingsKey!==settingsKey){settingsForm.elements.namedItem('eyeColor').value=String(view.settings.display.eyeColor);settingsForm.elements.namedItem('orientation').value=view.settings.display.orientation;settingsForm.dataset.settingsKey=settingsKey;}
+ renderHardware(view,owner());
  selectTab(tab,false);const peer=me.user.id;callUI.update(view.calls,peer,view.id);
  if(tab==='chat'&&$('#chatLog').dataset.circle!==view.id)renderChat();
  }catch(e){$('#connection').textContent='Server connection lost';$('#connection').classList.add('warning');callUI.stop();}finally{polling=false;}}
@@ -98,6 +104,14 @@ $('#cameraEnabled').onchange=async e=>{try{await request(circlePath()+'/privacy'
 $('#chatForm').onsubmit=e=>{e.preventDefault();const message=$('#chatMessage').value;$('#chatMessage').value='';sendChat(message);};
 $('#chatMessage').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#chatForm').requestSubmit();}};
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;try{
+ if(b.dataset.buddyAction){
+   const action=b.dataset.buddyAction;
+   if(action==='acknowledge'&&!confirm('Record the user’s confirmation for the active reminder? This does not verify a medicine dose.'))return;
+   if(action==='check_in')await request(circlePath()+'/checkins',{minutes:15});
+   else await request(circlePath()+'/bridge/api/actions',{action,reminderId:view.devices[0]?.status?.activeReminderId||''});
+   toast('Queued for Buddy. Delivery results appear in My Buddy.');await refresh();return;
+ }
+ if(b.dataset.unpair){if(!confirm('Unpair this Buddy? It will stop using this circle and show a new pairing code.'))return;await request(circlePath()+'/devices/unpair',{deviceId:b.dataset.unpair});await refresh();return;}
  if(b.dataset.tab||b.dataset.open){selectTab(b.dataset.tab||b.dataset.open);return;}
  if(b.dataset.chatSuggestion){await sendChat(b.dataset.chatSuggestion);return;}
  if(b.dataset.editor){editorPage=b.dataset.editor;selectTab('settings');return;}

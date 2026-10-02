@@ -73,3 +73,25 @@ test('Gemini is used when ElevenLabs is unavailable', async () => {
     assert.match(destinations[1], /generativelanguage\.googleapis\.com/);
   } finally { globalThis.fetch = original; }
 });
+
+test('Gemini raw little-endian PCM is resampled and request uses a real prebuilt voice',async()=>{
+  const original=globalThis.fetch;
+  globalThis.fetch=async(_url,options)=>{
+    const request=JSON.parse(options.body);
+    assert.equal(request.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Sulafat');
+    return new Response(JSON.stringify({candidates:[{content:{parts:[{inlineData:{data:wav24k().subarray(44).toString('base64'),mimeType:'audio/L16;codec=pcm;rate=24000'}}]}}]}));
+  };
+  try{const result=await tts({GEMINI_API_KEY:'synthetic'});assert.equal(result.status,200);assert.equal(result.body.length,32000);}finally{globalThis.fetch=original;}
+});
+
+test('speech reserves time for Gemini instead of retrying old keys indefinitely',async()=>{
+  const original=globalThis.fetch,clock=Date.now;let now=100000,calls=0;
+  Date.now=()=>now;
+  globalThis.fetch=async url=>{
+    ++calls;
+    if(String(url).includes('elevenlabs')){now+=12000;return new Response('',{status:429});}
+    return new Response(JSON.stringify({candidates:[{content:{parts:[{inlineData:{data:wav24k().toString('base64')}}]}}]}));
+  };
+  try{const result=await tts({ELEVENLABS_API_KEYS:'old1,old2,old3,old4',GEMINI_API_KEY:'synthetic'});assert.equal(result.status,200);assert.equal(calls,4);assert.equal(result.headers['X-Buddy-TTS-Provider'],'Gemini');}
+  finally{globalThis.fetch=original;Date.now=clock;}
+});

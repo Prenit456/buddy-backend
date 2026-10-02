@@ -113,7 +113,7 @@
             <article class="card form-card">
               <h2>Speech controls</h2>
               <label class="range-label"><span><b>Speaking pace</b><output id="rateOutput">72</output></span><input type="range" min="40" max="120" data-path="voice.rate" /></label>
-              <label class="range-label"><span><b>Offline fallback pitch</b><output id="pitchOutput">64</output></span><input type="range" min="30" max="100" data-path="voice.pitch" /><small>Natural voices retain their original pitch.</small></label>
+              <label class="range-label"><span><b>Natural voice pitch</b><output id="pitchOutput">64</output></span><input type="range" min="30" max="100" data-path="voice.pitch" disabled /><small>The selected provider preserves its natural pitch; the ESP does not have offline TTS.</small></label>
               <label class="range-label"><span><b>Volume</b><output id="volumeOutput">82</output></span><input type="range" min="0" max="100" data-path="voice.volume" /></label>
               <label><span>Repeat unconfirmed reminders</span><select data-path="voice.repeatCount" data-number><option value="1">Once</option><option value="2">Twice</option><option value="3">Three times</option></select><small>One minute apart; stops after you confirm or snooze.</small></label>
             </article>
@@ -144,16 +144,16 @@
             <article class="card form-card">
               <h2>Emergency response</h2>
               <label class="range-label"><span><b>Cancellation countdown</b><output id="sosOutput">8 seconds</output></span><input type="range" min="3" max="30" data-path="safety.sosCountdownSeconds" /></label>
-              <label><span>Alert webhook URL</span><input type="url" data-path="safety.webhookUrl" placeholder="https://your-service.example/buddy-alert" /><small>For SMS, WhatsApp, email, or a custom caregiver service.</small></label>
+              <label><span>External notifications</span><input type="text" value="Care-circle alerts only in this prototype" disabled /><small>SMS, WhatsApp and emergency-service dialing are not configured. Keep a carer’s app open for alerts.</small></label>
               <label><span>Alert after a missed reminder</span><select data-path="safety.missedReminderMinutes" data-number><option value="10">10 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
             </article>
             <article class="card emergency-card">
-              <span class="shield">♡</span><h2>Test the safety flow</h2><p>Starts the countdown on Buddy. It can be cancelled before any webhook is called.</p>
+              <span class="shield">♡</span><h2>Test the safety flow</h2><p>Queues a countdown on Buddy. Press its button or use Cancel SOS before it expires. An internet connection is required to deliver the resulting care-circle alert.</p>
               <button class="button danger full" data-action="sos">Start SOS test</button>
               <button class="button soft full" data-action="cancel_sos">Cancel SOS</button>
             </article>
           </div>
-          <article class="card form-card"><h2>Quiet hours</h2><div class="form-grid"><label><span>Starts</span><input type="time" data-path="safety.quietStart" /></label><label><span>Ends</span><input type="time" data-path="safety.quietEnd" /></label></div><p class="subtle">Emergency alerts and medicine reminders still sound during quiet hours.</p></article>
+          <article class="card form-card"><h2>Quiet hours</h2><div class="form-grid"><label><span>Starts</span><input type="time" data-path="safety.quietStart" /></label><label><span>Ends</span><input type="time" data-path="safety.quietEnd" /></label></div><p class="subtle">Medicine reminders still sound. Other scheduled reminder speech is muted during quiet hours; the display still shows it.</p></article>
         </section>
 
         <section class="page" id="page-messages" data-title="Send a little warmth" data-eyebrow="FAMILY MESSAGES">
@@ -169,7 +169,7 @@
           <div class="two-grid">
             <article class="card form-card">
               <h2>Connection</h2>
-              <label><span>Buddy address</span><div class="input-button"><input id="deviceUrl" placeholder="http://buddy.local" /><button class="button soft" id="connectButton">Connect</button></div><small>Use the ESP32's local address on the same Wi‑Fi. In care-circle mode, pairing happens in My Buddy.</small></label>
+              <label><span>Cloud connection</span><div class="input-button"><input id="deviceUrl" placeholder="Cloudflare care API" /><button class="button soft" id="connectButton">Connect</button></div><small>This page uses the Cloudflare care API. Pair in My Buddy using the TFT code; Buddy can be on another Wi-Fi network.</small></label>
               <div class="device-facts"><p><span>Status</span><b id="factStatus">Unknown</b></p><p><span>IP address</span><b id="factIp">—</b></p><p><span>Firmware</span><b id="factFirmware">—</b></p><p><span>Free memory</span><b id="factMemory">—</b></p><p><span>Audio</span><b id="factAudio">—</b></p></div>
             </article>
             <article class="card form-card">
@@ -178,7 +178,11 @@
               <label><span>Buddy's name</span><input data-path="device.callName" maxlength="24" placeholder="Buddy" /><small>For this firmware, say “Hi ESP” to wake Buddy offline. The name here is for introductions; a custom “Buddy” wake model can be added later.</small></label>
               <label><span>Time zone</span><select id="timezoneChoice"><option value="Asia/Kolkata">India</option><option value="UTC">UTC</option><option value="Europe/London">United Kingdom</option><option value="America/New_York">US Eastern</option></select></label>
               <p class="subtle">Voice and prescription processing use the Cloudflare backend. No laptop IP address is needed on Buddy.</p>
-              <div class="toggle-row"><div><b>Hands-free listening</b><small>Enable the microphone in the device lab. Turn it off there at any time. The demo uses cloud transcription.</small></div></div>
+              <label><span>Microphone privacy</span><select data-path="preferences.privacyMode"><option value="wake-phrase">Offline “Hi ESP” wake detection</option><option value="microphone-off">Microphone off, including calls</option></select><small>Wake detection stays on the ESP. Only speech recorded after activation goes to the cloud.</small></label>
+              <label class="check"><input type="checkbox" data-path="display.eyesEnabled"> Show animated eyes</label>
+              <label class="check"><input type="checkbox" data-path="preferences.dailyGreeting"> Morning greeting at 09:00</label>
+              <label class="check"><input type="checkbox" data-path="preferences.hydrationPrompts"> Gentle water check-in at 11:00</label>
+              <label class="check"><input type="checkbox" data-path="preferences.familyMessages"> Read family messages aloud</label>
             </article>
           </div>
           <article class="warning-card"><div><b>Reset Wi‑Fi</b><p>Use this only when moving Buddy to a different network.</p></div><button class="button danger-ghost" id="resetWifi">Reset Wi‑Fi</button></article>
